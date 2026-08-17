@@ -331,3 +331,40 @@ in by the entry that creates the initial commit.
   real initial Git SHA, then append a new entry containing that SHA and the
   regenerated artifact hashes.
 - **Commit:** pending (this entry precedes the initial commit by design)
+
+## AL-0018 — Initial commit; artifacts re-stamped with real Git SHA
+
+- **Category:** protocol-relevant decision + artifact regeneration
+- **Actor:** Claude (Claude Code), commit explicitly approved by the user
+- **What:** Initial commit created (approved, not pushed):
+  **`88af53d6b8da794d1c91b623df004226f59492f4`** — 50 files, 8,609 insertions;
+  no `data/` paths committed. `nqr data audit --part all` rerun afterwards so
+  every artifact envelope records this SHA. All decode caches hit (code,
+  config, and vendor identities unchanged); manifests were re-hashed in full.
+  Verified: all seven envelopes carry `git_sha`
+  `88af53d6b8da794d1c91b623df004226f59492f4`, `audit_code_hash`
+  `b4d7a27aabcaa4e3c7ad3bdf71f52cea27cb417bcd5f57867f457a6ef53caa40`, and
+  `config_hash`
+  `1bfe19bb7698b24654aa8fc69800051bc831803de4d35f15e028120e30a6fddf`.
+- **Gate statuses (explicitly distinguished):**
+  - `storage_gate` artifact: **FAIL** — 267.5 GB free at rerun time
+    (fluctuates a few GB with system activity; previously 263.2 GB), below
+    the 1000 GB required minimum.
+  - **Overall MBP-1 purchase gate: WARN — do not purchase** until the new
+    M.2 is installed, the data root is repointed, and `nqr data storage-gate`
+    passes. Data quality itself supports the purchase.
+- **Artifact statuses and SHA-256 (post-SHA-stamp generation):**
+  - `storage_gate.json` FAIL `b09dccf8903a3a638b592a33e9bef47de42eb3bd6fd8d918d07eafe8109e2332`
+  - `manifest_validation.json` PASS `1e9107d8779d464439499ee3f62bdd6e9da389203b0b57668f5120ec9e3d2a21`
+  - `mbp1_sample_audit.json` WARN `93ba083b894f672767f93348dfca20d8ffe9c305514871b8d3279a6fa6861e6d`
+  - `trades_audit.json` WARN `2201a2ec003e16b0398db5e651353cf08d86923664b9970e3313011b33bd9fc3`
+  - `mbp1_trades_reconciliation.json` PASS `d63b32f49c15f63988dcc17606f16b1661822be504b0120d9a1eebb661a7e1cb`
+  - `mbo_inventory.json` WARN `281d944bc5e7660e9665d152550321eaa3afc003ec6160d30e08a494c9952bba`
+  - `mbo_deep_audit.json` WARN `152a348ebeee6b461216373c9b517535b19a3f78dd174be5191311bbab07c692`
+- **Evidence:** 135/135 tests passing after the rerun; `git show --stat` of
+  the initial commit lists no `data/` paths; working tree clean apart from
+  this log entry, which is committed separately (below) so the initial
+  commit's SHA — already recorded inside the regenerated artifacts — is never
+  amended.
+- **Commit:** this entry is included in the second commit (SHA recorded in
+  the commit itself; the next log entry to touch this file should cite it).
