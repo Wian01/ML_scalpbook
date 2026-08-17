@@ -1,0 +1,11 @@
+# Data tree location. Relative paths resolve against the repository root.
+# Point this (or the NQR_DATA_ROOT environment variable, which overrides it)
+# at the dedicated data volume, e.g. "D:/nq-data", once the new M.2 is
+# installed. Raw vendor data under <data_root>/raw is immutable.
+data_root: data
+
+# Free-space gate on the data volume before the full two-year MBP-1 purchase
+# (canonical spec sections 2.2 and 59).
+storage_gate:
+  required_free_gb: 1000
+  preferred_free_gb: 2000

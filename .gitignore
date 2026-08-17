@@ -1,0 +1,25 @@
+# Licensed market data and ALL derived data artifacts.
+# Raw vendor data is immutable and must never be committed (canonical spec §11).
+# Derived data (normalized, qa, samples, features, labels, datasets, holdout)
+# is reproducible from raw + code + config and contains licensed market values.
+# Root-anchored: must NOT ignore config/data/*.yaml (committed configuration).
+/data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Experiment outputs may contain licensed market values; registry artifacts are
+# committed selectively via explicit review, not by default.
+experiments/*/predictions.parquet
+experiments/*/daily_metrics.parquet
+
+# OS / editor
+.DS_Store
+Thumbs.db

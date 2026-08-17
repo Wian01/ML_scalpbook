@@ -1,0 +1,31 @@
+[project]
+name = "nqresearch"
+version = "0.1.0"
+description = "Local NQ futures ML research platform (V1) — see docs/canonical-spec-v1.0.md"
+requires-python = ">=3.12"
+dependencies = [
+    "databento>=0.44",
+    "polars>=1.0",
+    "pyarrow>=16",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6",
+]
+
+[project.scripts]
+nqr = "nqresearch.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nqresearch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

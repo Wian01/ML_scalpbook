@@ -1,0 +1,8 @@
+# CME trading-session semantics (canonical spec sections 9/10).
+# Times are exchange-local (America/Chicago); storage remains UTC nanoseconds.
+# The session boundary starts the NEXT trading day. V1 RTH is a config value,
+# not code; changing it is a protocol-relevant change requiring review.
+timezone: America/Chicago
+session_boundary: "17:00"
+rth_start: "08:30"
+rth_end: "15:00"
