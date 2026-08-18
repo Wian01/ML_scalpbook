@@ -1,0 +1,90 @@
+# MBP-1 source-provenance registry (tracked configuration; part of the
+# effective configuration hash). Paths are relative to <data_root>.
+#
+# Roles:
+#   FULL_HISTORY_CANONICAL - the canonical two-year research corpus.
+#   MILESTONE0_QA_SAMPLE   - immutable Milestone 0 QA source; reproduces the
+#                            original sample audit; NEVER research input.
+#
+# The two annual jobs are exactly adjacent ([2024-08-17, 2025-08-17) +
+# [2025-08-17, 2026-08-17), UTC ns). The two-week sample is fully contained
+# in the recent annual job. Its 11 daily files were verified content-identical
+# to the annual copies at the DECODED-RECORD level (115,583,040 records
+# byte-compared, all identical; artifact mbp1_sample_overlap_record_level).
+# File-level vendor SHA-256 differs across requests by design (per-request
+# DBN container metadata) and is NOT a valid cross-job identity check.
+# The recent annual job is canonical for the overlapping dates.
+# Deduplication happens ONLY at this source-job/logical-partition level -
+# never by row-level heuristics.
+sources:
+  - request_id: GLBX-20260817-P3KX4KXDQF
+    path: raw/mbp1/2024-08-17_2025-08-17/GLBX-20260817-P3KX4KXDQF
+    role: FULL_HISTORY_CANONICAL
+    research_eligible: true
+    dataset: GLBX.MDP3
+    schema: mbp-1
+    symbols: [NQ.FUT]
+    stype_in: parent
+    stype_out: instrument_id
+    start_ns: 1723852800000000000   # 2024-08-17T00:00:00Z (inclusive)
+    end_ns: 1755388800000000000     # 2025-08-17T00:00:00Z (exclusive)
+    manifest: manifest.json
+    manifest_sha256: f8af3ceb661c6b407e50ef20fefb9268d052e479f6e152c2774db308f5e6e45d
+    notes: >-
+      Older annual tranche of the canonical two-year corpus. Vendor
+      condition.json flags 1 date "degraded" (2024-09-18, file present);
+      recorded for session-QA classification, not silently excluded here.
+
+  - request_id: GLBX-20260817-S9GCQWS6L8
+    path: raw/mbp1/2025-08-17_2026-08-17/GLBX-20260817-S9GCQWS6L8
+    role: FULL_HISTORY_CANONICAL
+    research_eligible: true
+    dataset: GLBX.MDP3
+    schema: mbp-1
+    symbols: [NQ.FUT]
+    stype_in: parent
+    stype_out: instrument_id
+    start_ns: 1755388800000000000   # 2025-08-17T00:00:00Z (inclusive)
+    end_ns: 1786924800000000000     # 2026-08-17T00:00:00Z (exclusive)
+    manifest: manifest.json
+    manifest_sha256: 46fde5a8eb6eddb83da559f7bd72063864612ab5bf80a8b89dece001ca605c77
+    notes: >-
+      Recent annual tranche; canonical for the 2026-08-03..2026-08-14 dates
+      that also exist in the Milestone 0 sample. Vendor condition.json flags
+      10 dates "degraded" (2025-09-17, 2025-09-24, 2025-11-28, 2026-01-31,
+      2026-03-15, 2026-03-16, 2026-03-21, 2026-04-10, 2026-05-24,
+      2026-07-30); recorded for session-QA classification, not silently
+      excluded here.
+
+  - request_id: GLBX-20260817-N8HD86YKNS
+    path: raw/mbp1/2026-08-03_2026-08-15/GLBX-20260817-N8HD86YKNS
+    role: MILESTONE0_QA_SAMPLE
+    research_eligible: false
+    dataset: GLBX.MDP3
+    schema: mbp-1
+    symbols: [NQ.FUT]
+    stype_in: parent
+    stype_out: instrument_id
+    start_ns: 1785715200000000000   # 2026-08-03T00:00:00Z (inclusive)
+    end_ns: 1786752000000000000     # 2026-08-15T00:00:00Z (exclusive)
+    manifest: manifest.json
+    manifest_sha256: a545a62aec4e38ac5e21700417409735561384e302ba6cc7c76f02b3979efbe1
+    notes: >-
+      Retained solely to reproduce the original Milestone 0 QA artifacts and
+      audit evidence. Excluded from modelling/research input because its
+      dates are covered by the canonical recent annual job; feeding both
+      would double-count the overlap, and mixing acquisition vintages inside
+      one logical partition is forbidden.
+
+overlap_policy:
+  canonical_role: FULL_HISTORY_CANONICAL
+  rule: >-
+    A logical daily partition may enter the research input set exactly once.
+    Dates covered by both a QA-only source and the canonical corpus resolve
+    to the canonical source, and only after cross-request identity of the
+    overlapping days has been established at the DECODED-RECORD level (each
+    copy independently matches its own vendor manifest; cross-request file
+    hashes and sizes differ because of request/container metadata, so
+    decoded-record equality is the authoritative identity check). Any date
+    covered by TWO research-eligible sources is an error and must fail
+    loudly - never silently selected, merged, or row-level deduplicated.

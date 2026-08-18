@@ -137,9 +137,15 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   MBO job also contains expected ES.FUT data, excluded from NQ research via
   instrument mappings. Results and gate status: `docs/data-specification.md` and
   `<data_root>/qa/m0/`; history: `docs/implementation-audit-log.md`.
-- Data migrated to the dedicated D: volume (`data_root: D:/nq-research/data`) on
-  2026-08-17; the current storage-gate and purchase-gate verdicts are in
-  `docs/data-specification.md` §5.5/§6.
+- Data lives on the dedicated D: volume (`data_root: D:/nq-research/data`).
+  **The two-year MBP-1 purchase is complete (2026-08-18):** two exactly
+  adjacent annual jobs (`GLBX-20260817-P3KX4KXDQF`, `GLBX-20260817-S9GCQWS6L8`)
+  are the canonical research corpus; the two-week job is QA-only
+  (`MILESTONE0_QA_SAMPLE`, research_eligible=false) and must never be combined
+  with the annual corpus for training. Source selection is registry-driven
+  (`config/data/mbp1_sources.yaml` + `nqresearch.sources`); acquisition QA:
+  `<data_root>/qa/mbp1_full_history/` and `docs/data-specification.md` §1a/§5.6.
+  Parent symbology: outright/spread classification remains mandatory.
 - Other unresolved items: CME holiday calendar (WARN statuses, provisional
   block IDs, 2026-07-03 classification); crossed-book burst 2026-08-10
   11:31:58 CT pending session-phase/`status` classification; front/roll rule

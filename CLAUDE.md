@@ -131,13 +131,24 @@ answer — including "no robust edge found" — is success. This is not an HFT p
 
 - Milestone 0 (data audit) executed against: two-week MBP-1 sample (2026-08-03 → 2026-08-14),
   two years of trades (2024-08-09 → 2026-08-07), and 85 MBO files fully decoded
-  (all 34 vendor manifests validated by SHA-256 after the incomplete 2025-10/2025-11/2026-01
-  MBO downloads were recovered and re-validated). One MBO job also contains expected
+  (all vendor manifests validated by SHA-256). One MBO job also contains expected
   ES.FUT data, excluded from NQ research via instrument mappings. Authoritative NQ
   MBO session/block counts, results, and gate status: `docs/data-specification.md`
-  and `<data_root>/qa/m0/`.
-  Data migrated to the dedicated D: volume (`data_root: D:/nq-research/data`,
-  config/data/paths.yaml) on 2026-08-17; storage gate re-run there — see
-  `docs/data-specification.md` §5.5/§6 for the current purchase-gate verdict. Partition dates and MBO block IDs are not yet
-  frozen (pending full history + holiday calendar).
+  and `<data_root>/qa/m0/`. Data lives on the dedicated D: volume
+  (`data_root: D:/nq-research/data`).
+- **The two-year MBP-1 purchase is complete (2026-08-18).** Two exactly adjacent
+  annual jobs — `GLBX-20260817-P3KX4KXDQF` [2024-08-17, 2025-08-17) and
+  `GLBX-20260817-S9GCQWS6L8` [2025-08-17, 2026-08-17) — are the **canonical
+  research corpus** (`FULL_HISTORY_CANONICAL`). The two-week job is retained
+  solely as the Milestone 0 QA source (`MILESTONE0_QA_SAMPLE`,
+  research_eligible=false) and **must never be combined with the annual corpus
+  for training** (its 11 dates are canonical in the recent annual job;
+  identity established at the decoded-record level — cross-request file
+  hashes differ by design via per-request container metadata, while each copy
+  matches its own vendor manifest). Source selection is registry-driven:
+  `config/data/mbp1_sources.yaml` + `nqresearch.sources` (never recursive
+  globbing of raw/mbp1). Acquisition QA: `<data_root>/qa/mbp1_full_history/`.
+  Parent-symbology reminder: the corpus contains outrights AND spreads;
+  outright/spread classification remains mandatory downstream.
+- Partition dates and MBO block IDs are not yet frozen (holiday calendar pending).
 - No features, labels, sampling, models, experiments, or holdout definition exist yet.

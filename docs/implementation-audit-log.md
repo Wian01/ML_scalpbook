@@ -446,3 +446,201 @@ in by the entry that creates the initial commit.
   calendar, crossed-burst classification, front/roll rule, MBO acquisition
   reasons, partition/holdout freezing — all unchanged from AL-0016.
 - **Commit:** pending (migration changes not yet committed by instruction).
+
+## AL-0020 — Two-year MBP-1 acquisition: provenance validation and source registry
+
+- **Category:** data acquisition + implementation + data-quality discovery
+- **Actor:** Claude (Claude Code); annual purchases made by the user;
+  prior commit c74b825 (AL-0019 = pre-purchase checkpoint, unchanged)
+- **What:** Read-only acquisition validation of the purchased two-year MBP-1
+  corpus and construction of the source-provenance layer. No raw file was
+  modified/renamed/moved/deleted; the old C: tree and the download ZIP were
+  untouched; the historical qa/m0 artifacts were not overwritten.
+- **Annual jobs validated** (metadata + condition + manifest re-hash):
+  - `GLBX-20260817-P3KX4KXDQF` [2024-08-17, 2025-08-17): 312 DBN + 3 JSON,
+    ~44.69 GB, files 2024-08-18 → 2025-08-15, all 312 condition entries
+    "available"; manifest 314/314 PASS.
+  - `GLBX-20260817-S9GCQWS6L8` [2025-08-17, 2026-08-17): 313 DBN + 3 JSON,
+    ~68.84 GB, files 2025-08-17 → 2026-08-16; manifest 315/315 PASS;
+    **10 vendor-"degraded" dates recorded** (2025-09-17, 2025-09-24,
+    2025-11-28, 2026-01-31*, 2026-03-15, 2026-03-16, 2026-03-21*,
+    2026-04-10, 2026-05-24, 2026-07-30; * Saturdays without files) — kept for
+    session-QA classification, not excluded here.
+  - Query params match the sample and frozen spec exactly (GLBX.MDP3, mbp-1,
+    NQ.FUT parent → instrument_id, DBN+zstd, daily splits, pretty/map flags
+    false). **Adjacency exact:** older.end == recent.start ==
+    1755388800000000000; no gap, no overlap.
+  - Sample job re-verified too: manifest 13/13 PASS. Total 642/642 files.
+- **KEY DISCOVERY — cross-request file hashes cannot prove identity:** every
+  one of the 11 overlapping sample files differs from its annual counterpart
+  by 2–9 bytes (annual smaller) with different SHA-256, although both copies
+  hash-match their own vendor manifests. Diagnosis: Databento batch files
+  embed per-request container metadata. Proof on the Sunday pair: parsed DBN
+  metadata equal, all 295,250 records byte-identical, 3-byte file diff.
+  **Authoritative identity check added (record-level):** all 11 day-pairs
+  decoded and byte-compared — **115,583,040 records, 100% identical**
+  (artifact `mbp1_sample_overlap_record_level`, PASS). Per rule 7 the
+  file-hash overlap check's requirement was changed (documented here, tests
+  updated): hash mismatch now WARNs with the explanation and defers to the
+  record-level gate; a sample file missing from the corpus still FAILs. The
+  original FAIL run is preserved in this history; the recent annual job is
+  designated canonical for the overlapping dates, subject to the independent
+  review of this phase.
+- **Source registry + safe selection implemented:**
+  `config/data/mbp1_sources.yaml` (in the effective config hash) records
+  request IDs, roles, eligibility, dataset/schema/symbology, authoritative
+  start/end ns, manifest identity, overlap policy, and the sample-retention
+  reason. `nqresearch/sources.py`: QA-sample-only selection for the Milestone
+  0 audit (CLI `mbp1` and `reconcile` parts now registry-scoped — they no
+  longer glob raw/mbp1 recursively, which would have decoded the annual
+  corpus); research enumeration uses only FULL_HISTORY_CANONICAL sources;
+  one file per logical daily partition; overlap between research-eligible
+  sources raises ResearchOverlapError; dedup is source-level only. Result:
+  **625 canonical research files, 2024-08-18 → 2026-08-16, zero sample
+  leakage.** No normalization/model pipeline was built.
+- **Artifacts** (`<data_root>/qa/mbp1_full_history/`; envelopes share
+  code hash `9f830642090c5d025903cccaa7074baeb33e2586f2411bb098b63c41be7a95d2`,
+  config hash `15c1e286ebd20ed780a2f3357b2136e06a76aa302547f6d868cb948cf2228210`,
+  data_root D:\nq-research\data, git_sha c74b825 — **post-commit re-stamp
+  required**):
+  - `mbp1_source_inventory.json` PASS `6d49ed4690c7c204eb0bb9d622f5c8c2ca8ac460e3f5df881a4038f594cebaf3`
+  - `mbp1_manifest_validation.json` PASS `88bed9667d2dc7f8fb5274a971a7ac45f0766f45fff69ce354b823a0afb11af5`
+  - `mbp1_range_adjacency.json` PASS `a4635fcb49f7b35ea970ba1563851ed888671b1d5a0f88c44af263460cbfa2fd`
+  - `mbp1_sample_overlap.json` WARN `28a626e60459f91348941227908a4265684bdeec92b208b82ab240b52c605960`
+  - `mbp1_sample_overlap_record_level.json` PASS `66fe6305a4b82f266f0f7e77479c83c005815e7a9aef34d27218ee30a5c30871`
+  - `mbp1_source_selection.json` PASS `82daf97715abf110538ecbff32d5862d454b08ba8b8022038a24a4fbb5e71d0a`
+  - `storage_gate.json` WARN `eff30f4501d5801bd6752d31971e4c4c0164f861a66f00540b2d1ae522cfa302`
+    (post-purchase: 1,847.3 GB free / 2,048.4 GB total — ≥1,000 GB required
+    met; <2,000 GB preferred; acceptable per stated policy)
+- **Tests:** 153/153 passing (18 new: registry/config-hash, adjacency,
+  research-input uniqueness and loud-overlap failure, QA-only sample scoping,
+  overlap comparison semantics incl. the documented WARN change).
+- **Unresolved risks:** independent review of this phase pending (canonical
+  designation of the overlap + the rule-7 requirement change explicitly
+  flagged for that review); acquisition artifacts need post-commit re-stamp;
+  vendor-"degraded" dates need session-QA classification in Milestone 2;
+  storage below preferred headroom (plan normalized-data footprint before
+  Milestone 2); no record-level decode/QA of the 614 non-overlap annual days
+  yet (deliberately out of scope — requires separate authorization);
+  holiday calendar and other AL-0016 items unchanged.
+- **Commit:** pending (this phase not yet committed by instruction).
+
+## AL-0021 — Acquisition review corrections: degraded-count fix, hardened identity gate, cohesive acquisition gate
+
+- **Category:** audit/review finding + implementation fix + data-quality correction
+- **Actor:** Claude (Claude Code); corrections requested by the independent
+  acquisition review, which accepted the overall result in principle
+  (record-level identity sufficient; sample stays excluded from research).
+- **Correction of AL-0020 (AL-0020 preserved unchanged, append-only):**
+  AL-0020 and the docs wrongly stated the older annual job's 312 condition
+  entries were all "available". The saved `mbp1_source_inventory.json` shows
+  **311 available + 1 degraded (2024-09-18, file present)**. Correct totals:
+  **11 degraded vendor-condition dates across the annual jobs** (1 older +
+  10 recent, incl. two Saturday entries without files). Root cause of the
+  reporting error: a PowerShell 5.1 `.Count`-on-single-object pitfall in the
+  ad-hoc summary command; the Python artifact was always correct. Docs
+  updated; the source-inventory artifact now reports **WARN** (not PASS)
+  when degraded condition entries exist — understood, non-blocking, pending
+  Milestone 2 session QA.
+- **Stale vendor-hash wording removed** from CLAUDE.md, the registry overlap
+  policy, and mbp1_acquisition docstrings; accurate wording everywhere: each
+  copy matches its own vendor manifest; cross-request file hashes/sizes
+  differ via request/container metadata; decoded-record equality is the
+  authoritative cross-request identity check. Repository-wide grep confirmed
+  no remaining contradictory current-status wording (historical audit-log
+  entries intentionally preserved).
+- **Record-level identity check made fail-safe:** expected pairs now come
+  from the validated sample manifest (never disk globs); zero expected pairs
+  FAILs; missing sample/canonical files, missing or multiple canonical
+  counterparts, pair-count shortfalls, record-count/dtype/byte mismatches,
+  and incomplete comparisons all FAIL. Comparator injectable for tests.
+- **Cohesive acquisition gate added** (`mbp1_acquisition_gate.json`): PASSes
+  only when inventory (PASS/WARN) covers the registry sources, manifests
+  verified, ranges adjacent, selection valid, file-level overlap is the
+  explained WARN (or PASS), and record-level identity PASSes for every
+  expected pair with binding to the current effective config hash, the
+  acquisition code hash (mbp1_acquisition/sources/dbnio/config/filenames
+  modules), and the current on-disk manifest.json SHA-256 identities.
+  Observed working as intended during regeneration: the gate FAILed while
+  the record-level evidence was stale and PASSed after fresh evidence.
+  `nqresearch.sources.require_provenance()` gives research preparation a
+  cheap mandatory check that refuses to proceed without a valid bound gate.
+- **Registry strengthened:** per-source `manifest_sha256` recorded (verified
+  during validation); validators enforce relative/escape-free unique paths,
+  unique request IDs, role↔eligibility consistency both directions,
+  start<end, and agreement with the expected specification
+  (dataset/schema/symbology/stype); all included in the effective config hash.
+- **Sample-leak verification repaired:** ownership now tracked explicitly per
+  logical partition and leak detection compares resolved normalized paths
+  (the old check compared a forward-slash registry string against a Windows
+  path string and could never match). Windows-safe regression test added
+  (case-insensitive path collision scenario).
+- **Regenerated artifacts** (`<data_root>/qa/mbp1_full_history/`; all eight
+  share code hash
+  `23b29cabff1470863896611e410754031cdd92ae8b6f4b305321f97ef08dfc55`
+  (audit_code_hash), config hash
+  `9b077200340925bfb5da9876f34cd6350ed496038ef714f14f0f76d588ba32d6`,
+  data_root D:\nq-research\data, git_sha c74b825 — post-commit re-stamp
+  still required; historical qa/m0 untouched; no non-overlap decode):
+  - `mbp1_source_inventory.json` **WARN** (degraded dates) `2cf649aa6410f024f63c21b751500785d934c1bc50aa55fcffa74871c42ac15c`
+  - `mbp1_manifest_validation.json` PASS (642/642) `84af13625c5159e6724396c4137f4ba9d8b86ee43847cee3e8a0bca5dd50e2f7`
+  - `mbp1_range_adjacency.json` PASS `bddefb0bcdaa5b2928144172cb1d1361642ad52e16b0626fee2b2a32c6032f78`
+  - `mbp1_sample_overlap.json` WARN (explained) `f230355fa0afd7c732077acf3b10302c89792f634520cab45356485a0c7fe750`
+  - `mbp1_sample_overlap_record_level.json` PASS (11/11 pairs, 115,583,040 records identical) `b2e6ce4ccdc869170417de94ecba14f2b32e3b90e2b64f3d34bbd411a2899469`
+  - `mbp1_source_selection.json` PASS (625 files, unique partitions, zero leaks) `cd9da642d92aa77e6fe3f804f8e3b54511b54b68068bf12943045c145b1f6b05`
+  - `storage_gate.json` WARN (1,847 GB free ≥1,000 required, <2,000 preferred) `778f1be3748b1f91962027d50105b7322df7ba23dbb22f8757c5dee3b1ff7d94`
+  - `mbp1_acquisition_gate.json` **PASS** (all 9 checks) `464a36f7e746fa1df0a9dc80fa50ee530f9a7ca6a9836ee0ccf409fb8d14477a`
+- **Tests:** 173/173 passing (20 new for registry validators, fail-safe
+  record-level gate, leak regression, degraded-WARN semantics).
+- **Unresolved risks:** post-commit re-stamp of qa/mbp1_full_history (will be
+  AL-0022); 11 degraded dates pending Milestone 2 session QA; storage below
+  preferred headroom; carried AL-0016 items.
+- **Commit:** pending (awaiting commit approval).
+
+## AL-0022 — Final review finding: provenance check must bind to current code
+
+- **Category:** audit/review finding + implementation fix
+- **Actor:** Claude (Claude Code); blocking omission identified by the final
+  independent review (which otherwise confirmed the revised evidence,
+  artifacts, and 173/173 tests).
+- **Finding:** `require_provenance()` verified gate status, effective config
+  hash, and manifest identities but NOT
+  `gate["acquisition_code_hash"] == acquisition_code_hash()` — so after a
+  future change to selection/comparison/provenance code, an old PASS gate
+  could still authorize research preparation, contradicting the stated
+  guarantee.
+- **Fix:** `require_provenance()` now recomputes the current acquisition code
+  hash and rejects stale-code gates; it also verifies the nine named gate
+  checks (`EXPECTED_GATE_CHECKS`) are present and PASS instead of trusting
+  only the top-level status, and rejects malformed gates.
+  `acquisition_code_hash()` coverage broadened to all modules that materially
+  define gate semantics: mbp1_acquisition, sources, dbnio, config, filenames,
+  **qa.manifest, qa.status** (seven modules).
+- **Evidence regeneration:** the broadened code hash invalidated the prior
+  record-level binding by design; the gate FAILed until fresh evidence was
+  produced (observed again live), then PASSed. Re-hash + 11 overlap pairs
+  re-decoded read-only (115,583,040 records, all identical; 614 non-overlap
+  days untouched; qa/m0, raw data, old C: tree, Downloads ZIP untouched).
+- **Final artifacts** (all eight share envelope audit_code_hash
+  `47836770...` (full value in envelopes), config hash
+  `9b077200340925bfb5da9876f34cd6350ed496038ef714f14f0f76d588ba32d6`,
+  data_root D:\nq-research\data, git_sha c74b825 — post-commit re-stamp
+  pending as AL-0023; gate binding acquisition_code_hash
+  `d50713673771ce8886f18a7cc47b6c01eac6a5a04293ffaf4395554a94ad6b76`):
+  - `mbp1_source_inventory.json` WARN `15f26d16673762bc64888be2711ab8aafe880e2d67292ea62eeb3925047a0904`
+  - `mbp1_manifest_validation.json` PASS `6a0c154dc8e4e0e88e0688100e4142daa3a68c27c2e6e85d0de0937a2e74d10c`
+  - `mbp1_range_adjacency.json` PASS `c97f9056fe56732b3c3960eb21a7ee5af8179b9bcb27154f36f62df9e2ea0744`
+  - `mbp1_sample_overlap.json` WARN `7a140b69c4aaac28158bb571dadb546d79ff81edcd4bc70e8006ff4a182f47ca`
+  - `mbp1_sample_overlap_record_level.json` PASS `153ccf25d453938d6951de2a8bdf4d06374043fe0c923887ef5db4529ce2a00f`
+  - `mbp1_source_selection.json` PASS `b8a0fcf49edd858bf46c7044de08852d66b1327a757e100728f5d036c5f25f18`
+  - `storage_gate.json` WARN `5f585e9b1e7f27dbb3b3fdae8ecddea207ec676e7fa34533343dfe34e6c53d1c`
+  - `mbp1_acquisition_gate.json` **PASS, 9/9 named checks**
+    `14cec4d625da23fce3c5ba8579294af18fb549e87bececdb286df71c34e45979`
+- **Tests:** **184/184 passing** (11 new require_provenance tests: valid gate
+  accepted; missing gate, FAIL status, stale config hash, changed manifest
+  identity, stale code hash, missing/malformed/non-PASS named checks all
+  rejected). `require_provenance()` exercised against the live gate: OK.
+- **Unresolved risks:** post-commit re-stamp (AL-0023); 11 degraded dates
+  pending Milestone 2 session QA; storage below preferred headroom; carried
+  AL-0016 items.
+- **Commit:** pending (awaiting commit approval).

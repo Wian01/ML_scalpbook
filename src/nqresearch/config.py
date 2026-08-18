@@ -15,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _repo_root() -> Path:
@@ -78,6 +78,125 @@ class SessionWindowConfig(BaseModel):
         return _parse_hhmm(self.rth_end)
 
 
+ROLE_FULL_HISTORY = "FULL_HISTORY_CANONICAL"
+ROLE_M0_QA_SAMPLE = "MILESTONE0_QA_SAMPLE"
+
+
+# Expected acquisition parameters for MBP-1 sources (frozen specification).
+MBP1_EXPECTED_DATASET = "GLBX.MDP3"
+MBP1_EXPECTED_SCHEMA = "mbp-1"
+MBP1_EXPECTED_SYMBOLS = ["NQ.FUT"]
+MBP1_EXPECTED_STYPE_IN = "parent"
+MBP1_EXPECTED_STYPE_OUT = "instrument_id"
+
+
+class Mbp1Source(BaseModel):
+    """One vendor batch job in the MBP-1 source-provenance registry."""
+
+    request_id: str
+    path: str  # relative to <data_root>; POSIX separators; no escapes
+    role: str
+    research_eligible: bool
+    dataset: str
+    schema_name: str = Field(alias="schema")
+    symbols: list[str]
+    stype_in: str
+    stype_out: str
+    start_ns: int
+    end_ns: int
+    manifest: str = "manifest.json"
+    manifest_sha256: str
+    notes: str = ""
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("role")
+    @classmethod
+    def _known_role(cls, v: str) -> str:
+        if v not in (ROLE_FULL_HISTORY, ROLE_M0_QA_SAMPLE):
+            raise ValueError(f"unknown source role: {v!r}")
+        return v
+
+    @field_validator("path")
+    @classmethod
+    def _safe_relative_path(cls, v: str) -> str:
+        p = Path(v)
+        if (
+            p.is_absolute()
+            or v.startswith(("/", "\\"))
+            or (len(v) > 1 and v[1] == ":")
+        ):
+            raise ValueError(f"source path must be relative to <data_root>: {v!r}")
+        if ".." in p.parts:
+            raise ValueError(f"source path must not contain '..': {v!r}")
+        return v
+
+    @field_validator("manifest_sha256")
+    @classmethod
+    def _hex_sha256(cls, v: str) -> str:
+        if len(v) != 64 or any(c not in "0123456789abcdef" for c in v.lower()):
+            raise ValueError("manifest_sha256 must be a 64-hex-char SHA-256")
+        return v.lower()
+
+    @model_validator(mode="after")
+    def _consistent(self):
+        if self.role == ROLE_M0_QA_SAMPLE and self.research_eligible:
+            raise ValueError(
+                f"{self.request_id}: MILESTONE0_QA_SAMPLE sources must have "
+                "research_eligible=false (the sample is never modelling input)"
+            )
+        if self.role == ROLE_FULL_HISTORY and not self.research_eligible:
+            raise ValueError(
+                f"{self.request_id}: FULL_HISTORY_CANONICAL sources must have "
+                "research_eligible=true"
+            )
+        if self.start_ns >= self.end_ns:
+            raise ValueError(f"{self.request_id}: start_ns must be < end_ns")
+        expected = {
+            "dataset": (self.dataset, MBP1_EXPECTED_DATASET),
+            "schema": (self.schema_name, MBP1_EXPECTED_SCHEMA),
+            "symbols": (self.symbols, MBP1_EXPECTED_SYMBOLS),
+            "stype_in": (self.stype_in, MBP1_EXPECTED_STYPE_IN),
+            "stype_out": (self.stype_out, MBP1_EXPECTED_STYPE_OUT),
+        }
+        for name, (actual, want) in expected.items():
+            if actual != want:
+                raise ValueError(
+                    f"{self.request_id}: {name}={actual!r} conflicts with the "
+                    f"expected specification value {want!r}"
+                )
+        return self
+
+
+class Mbp1SourceRegistry(BaseModel):
+    sources: list[Mbp1Source] = []
+    overlap_policy: dict = {}
+
+    @model_validator(mode="after")
+    def _unique_ids_and_paths(self):
+        ids = [s.request_id for s in self.sources]
+        if len(ids) != len(set(ids)):
+            raise ValueError("duplicate request_id in mbp1 source registry")
+        paths_ = [s.path for s in self.sources]
+        if len(paths_) != len(set(paths_)):
+            raise ValueError("duplicate source path in mbp1 source registry")
+        return self
+
+    def by_role(self, role: str) -> list[Mbp1Source]:
+        return [s for s in self.sources if s.role == role]
+
+    def research_sources(self) -> list[Mbp1Source]:
+        return [s for s in self.sources if s.research_eligible]
+
+
+@lru_cache(maxsize=None)
+def load_mbp1_sources(repo_root: Path | None = None) -> Mbp1SourceRegistry:
+    root = repo_root or _repo_root()
+    return Mbp1SourceRegistry(
+        **_load_yaml(root / "config" / "data" / "mbp1_sources.yaml")
+    )
+
+
 def _load_yaml(path: Path) -> dict:
     if not path.is_file():
         return {}
@@ -108,10 +227,12 @@ def effective_config_hash(repo_root: Path | None = None) -> str:
     root = repo_root or _repo_root()
     dp = load_data_paths_config(root)
     sc = load_session_config(root)
+    reg = load_mbp1_sources(root)
     payload = {
         "data_paths": dp.model_dump(),
         "sessions": sc.model_dump(),
         "resolved_data_root": str(dp.resolved_data_root(root)),
+        "mbp1_sources": reg.model_dump(by_alias=True),
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()
@@ -123,7 +244,7 @@ def clear_config_cache() -> None:
 
     Tolerates monkeypatched (non-lru_cache) loader replacements.
     """
-    for fn in (load_data_paths_config, load_session_config):
+    for fn in (load_data_paths_config, load_session_config, load_mbp1_sources):
         cache_clear = getattr(fn, "cache_clear", None)
         if cache_clear is not None:
             cache_clear()

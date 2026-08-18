@@ -10,7 +10,10 @@ from nqresearch.qa import status as st
 from nqresearch.qa.report import write_artifact
 
 AUDIT_PARTS = ["storage", "manifests", "mbp1", "trades", "mbo", "mbo-deep",
-               "reconcile", "all"]
+               "reconcile", "mbp1-acquisition", "mbp1-overlap-records", "all"]
+# NOTE: "all" covers the Milestone 0 parts; "mbp1-acquisition" is explicit-only
+# so acquisition artifacts under qa/mbp1_full_history/ are regenerated
+# deliberately, never as a side effect.
 
 
 def _run_storage_gate() -> str:
@@ -44,10 +47,14 @@ def _run_audit(part: str, chunk_rows: int) -> int:
 
     if part in ("mbp1", "all"):
         from nqresearch.qa.mbp1_audit import audit_directory
+        from nqresearch.sources import m0_sample_dir
 
-        print("[m0] auditing MBP-1 sample ...", flush=True)
+        # Registry-scoped: ONLY the MILESTONE0_QA_SAMPLE job. The raw/mbp1
+        # tree also holds the canonical annual corpus, which this sample
+        # audit must never decode.
+        print("[m0] auditing MBP-1 sample (registry-scoped) ...", flush=True)
         result = audit_directory(
-            paths.raw_mbp1(), chunk_rows, cache_dir=cache_root / "mbp1"
+            m0_sample_dir(), chunk_rows, cache_dir=cache_root / "mbp1"
         )
         p = write_artifact(result, paths.qa_m0(), "mbp1_sample_audit", paths.ROOT)
         statuses["mbp1"] = result["status"]
@@ -82,15 +89,69 @@ def _run_audit(part: str, chunk_rows: int) -> int:
 
     if part in ("reconcile", "all"):
         from nqresearch.qa.reconcile import reconcile_overlap
+        from nqresearch.sources import m0_sample_dir
 
-        print("[m0] reconciling MBP-1 trades vs standalone trades ...", flush=True)
+        print("[m0] reconciling MBP-1 sample trades vs standalone trades ...", flush=True)
         result = reconcile_overlap(
-            paths.raw_mbp1(), paths.raw_trades(), chunk_rows,
+            m0_sample_dir(), paths.raw_trades(), chunk_rows,
             cache_dir=cache_root / "reconcile",
         )
         p = write_artifact(result, paths.qa_m0(), "mbp1_trades_reconciliation", paths.ROOT)
         statuses["reconcile"] = result["status"]
         print(f"[m0] reconcile: {result['status']} -> {p}", flush=True)
+
+    if part == "mbp1-acquisition":
+        from nqresearch.config import load_data_paths_config
+        from nqresearch.qa.mbp1_acquisition import (
+            acquisition_gate,
+            run_acquisition_validation,
+        )
+        from nqresearch.qa.storage import storage_gate
+
+        out_dir = paths.qa() / "mbp1_full_history"
+        print("[acq] validating MBP-1 acquisition + provenance ...", flush=True)
+        payloads = run_acquisition_validation(paths.data_root())
+        payloads["storage_gate"] = storage_gate(
+            paths.data_root(), load_data_paths_config().storage_gate
+        )
+        for name, payload in payloads.items():
+            payload["restamp_note"] = (
+                "Generated from an uncommitted working tree; re-stamp by "
+                "re-running --part mbp1-acquisition after the acquisition commit."
+            )
+            p = write_artifact(payload, out_dir, name, paths.ROOT)
+            statuses[name] = payload["status"]
+            print(f"[acq] {name}: {payload['status']} -> {p}", flush=True)
+        gate = acquisition_gate(paths.data_root(), out_dir)
+        p = write_artifact(gate, out_dir, gate["artifact"], paths.ROOT)
+        statuses["acquisition-gate"] = gate["status"]
+        print(f"[acq] gate: {gate['status']} -> {p}", flush=True)
+
+    if part == "mbp1-overlap-records":
+        from nqresearch.config import load_mbp1_sources
+        from nqresearch.qa.mbp1_acquisition import (
+            RECORD_LEVEL_ARTIFACT_NAME,
+            acquisition_gate,
+            record_level_overlap_comparison,
+        )
+
+        out_dir = paths.qa() / "mbp1_full_history"
+        print("[acq] record-level overlap comparison (decodes both copies) ...",
+              flush=True)
+        payload = record_level_overlap_comparison(
+            load_mbp1_sources(), paths.data_root(), chunk_rows
+        )
+        payload["restamp_note"] = (
+            "Generated from an uncommitted working tree; re-stamp by re-running "
+            "after the acquisition commit."
+        )
+        p = write_artifact(payload, out_dir, RECORD_LEVEL_ARTIFACT_NAME, paths.ROOT)
+        statuses["mbp1-overlap-records"] = payload["status"]
+        print(f"[acq] overlap-records: {payload['status']} -> {p}", flush=True)
+        gate = acquisition_gate(paths.data_root(), out_dir)
+        p = write_artifact(gate, out_dir, gate["artifact"], paths.ROOT)
+        statuses["acquisition-gate"] = gate["status"]
+        print(f"[acq] gate: {gate['status']} -> {p}", flush=True)
 
     overall = st.worst(statuses.values()) if statuses else st.FAIL
     print(f"[m0] overall: {overall} ({statuses})", flush=True)

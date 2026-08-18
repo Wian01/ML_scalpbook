@@ -28,7 +28,9 @@ and re-measures whatever volume the configured data root resides on.
 | Dataset | Location (immutable) | Coverage (UTC file dates) | Files | Compressed |
 |---|---|---|---|---|
 | Trades (2 jobs) | `<data_root>/raw/trades/NQ_20240809-20250809`, `NQ_20250809-20260809` | 2024-08-09 → 2026-08-07 | 624 | ~3.03 GB |
-| MBP-1 sample (1 job) | `<data_root>/raw/mbp1/2026-08-03_2026-08-15/GLBX-20260817-N8HD86YKNS` | 2026-08-03 → 2026-08-14 | 11 | ~2.26 GB |
+| MBP-1 sample (1 job) — **MILESTONE0_QA_SAMPLE, research_eligible=false** | `<data_root>/raw/mbp1/2026-08-03_2026-08-15/GLBX-20260817-N8HD86YKNS` | 2026-08-03 → 2026-08-14 | 11 | ~2.26 GB |
+| **MBP-1 annual (older) — FULL_HISTORY_CANONICAL** | `<data_root>/raw/mbp1/2024-08-17_2025-08-17/GLBX-20260817-P3KX4KXDQF` | query [2024-08-17, 2025-08-17); files 2024-08-18 → 2025-08-15 | 312 | ~44.69 GB |
+| **MBP-1 annual (recent) — FULL_HISTORY_CANONICAL** | `<data_root>/raw/mbp1/2025-08-17_2026-08-17/GLBX-20260817-S9GCQWS6L8` | query [2025-08-17, 2026-08-17); files 2025-08-17 → 2026-08-16 | 313 | ~68.84 GB |
 | MBO (31 jobs) | `<data_root>/raw/mbo/GLBX-*` | 85 files (post re-download), 2025-08-18 → 2026-08-07 | 85 | ~36.2 GB |
 
 Every job directory carries vendor `metadata.json`, `condition.json` (all MBP-1
@@ -50,6 +52,59 @@ Notes:
 - MBP-1 sample has no 2026-08-08 file (Saturday) and a small 2026-08-09 file
   (Sunday: pre-open + 17:00 CT evening open only). This is expected, not a gap.
 - MBP-1 ↔ trades reconciliation overlap: UTC dates 2026-08-03 → 2026-08-07.
+
+## 1a. Full-history MBP-1 acquisition and source provenance (2026-08-18)
+
+**The two-year MBP-1 purchase is complete.** The two annual jobs above are the
+**canonical research corpus**: 625 daily DBN files covering exactly adjacent
+query ranges [2024-08-17, 2025-08-17) + [2025-08-17, 2026-08-17) with no gap
+and no overlap (~113.5 GB compressed). Vendor query parameters match the
+sample and the frozen spec: `GLBX.MDP3`, `mbp-1`, `NQ.FUT` parent →
+`instrument_id`, DBN + zstd, daily splits, `pretty_px/pretty_ts/map_symbols/
+split_symbols = false`. Because acquisition is parent-symbology, the corpus
+contains outright futures **and** calendar spreads plus contract expirations —
+downstream outright/spread classification remains mandatory (§2).
+
+**Source provenance is registry-driven** (`config/data/mbp1_sources.yaml`,
+part of the effective configuration hash; selection code in
+`nqresearch.sources`):
+
+- Both annual jobs: `FULL_HISTORY_CANONICAL`, `research_eligible: true`.
+- The two-week job: `MILESTONE0_QA_SAMPLE`, `research_eligible: false` —
+  retained solely to reproduce the original Milestone 0 QA artifacts. Its 11
+  daily files (2026-08-03 → 2026-08-14) are fully contained in the recent
+  annual job and were verified **content-identical at the decoded-record
+  level: all 115,583,040 records byte-compared across all 11 day-pairs,
+  identical** (artifact `mbp1_sample_overlap_record_level`). An important
+  observed fact: **file-level vendor SHA-256 CANNOT establish cross-request
+  identity** — each Databento batch file embeds per-request container
+  metadata, so the same market day differs by 2–9 bytes between jobs (both
+  copies hash-match their own manifests; parsed DBN metadata and all records
+  are equal). The file-hash comparison is therefore an explained WARN and the
+  record-level comparison is the authoritative identity gate. The recent
+  annual job is canonical for those dates. **The sample must never be
+  combined with the annual corpus for training.**
+- Enumeration rules: the Milestone 0 sample audit selects only the QA sample;
+  research/normalization input enumerates only canonical sources; each logical
+  daily partition may appear exactly once; an overlap between two
+  research-eligible sources fails loudly. Deduplication is source-level only —
+  row-level/heuristic dedup is forbidden (legitimate messages can be
+  identical).
+
+**Vendor condition flags: 11 "degraded" dates across the annual jobs.** The
+older job marks 1 date degraded (2024-09-18, file present; 311 available).
+The recent job marks 10 (2025-09-17, 2025-09-24, 2025-11-28, 2026-01-31*,
+2026-03-15, 2026-03-16, 2026-03-21*, 2026-04-10, 2026-05-24, 2026-07-30;
+* = Saturdays with no file). Files exist for all non-Saturday degraded dates;
+the flags make the source inventory **WARN** (understood, non-blocking) and
+are recorded for session-QA classification in Milestone 2, not silently
+excluded. (An earlier summary wrongly reported the older job fully
+"available" — corrected in audit-log AL-0021; AL-0020 preserved as written.)
+
+**Acquisition QA artifacts** (never overwriting the historical
+`<data_root>/qa/m0/` set): `<data_root>/qa/mbp1_full_history/` —
+`mbp1_source_inventory`, `mbp1_manifest_validation`, `mbp1_range_adjacency`,
+`mbp1_sample_overlap`, `mbp1_source_selection`, `storage_gate` (results: §5.6).
 
 ## 2. Symbology and instrument handling (§8; observed)
 
@@ -273,6 +328,24 @@ across all 85 files):**
   preferred)** to hold raw MBP-1 + normalized Parquet + QA + features + existing
   MBO (~36 GB after the re-download) + experiment artifacts. The D: data volume
   meets both thresholds.
+
+### 5.6 Post-purchase acquisition validation (2026-08-18; `<data_root>/qa/mbp1_full_history/`)
+
+| Artifact | Status | Result |
+|---|---|---|
+| mbp1_source_inventory | WARN (understood) | All three jobs match registry + spec expectations (request IDs, placement, dataset/schema/symbology, encoding, splits, integer prices, ranges, manifest.json SHA-256 vs registry); WARN reflects the 11 vendor-degraded condition dates pending Milestone 2 session QA |
+| mbp1_manifest_validation | PASS | 642/642 manifested files re-hashed (314 + 315 + 13 incl. QA-only sample job): exact sizes + SHA-256, zero missing/unmanifested/zero-size |
+| mbp1_range_adjacency | PASS | [2024-08-17, 2025-08-17) + [2025-08-17, 2026-08-17): exactly adjacent, no gap, no overlap |
+| mbp1_sample_overlap | WARN (explained) | File hashes differ 2–9 bytes/file (per-request DBN container metadata — cross-request file-hash identity is structurally unattainable); authoritative check is the record-level artifact |
+| mbp1_sample_overlap_record_level | **PASS** | All 11 expected day-pairs (from the validated sample manifest) decoded and byte-compared: **115,583,040 records, all identical**; fail-safe (zero/missing/multiple counterparts, incomplete comparisons, dtype or byte mismatches all FAIL); binding embedded |
+| mbp1_source_selection | PASS | 625 canonical research files, 2024-08-18 → 2026-08-16, every logical partition unique, ownership tracked, zero sample files in research input (resolved-path check) |
+| storage_gate (post-purchase) | WARN | 1,847 GB free of 2,048 GB: **meets the 1,000 GB required minimum; below the 2,000 GB preferred headroom** — acceptable per policy since ≥1 TB remains free |
+| **mbp1_acquisition_gate** | **PASS** | Cohesive gate: all 9 checks PASS — inventory/manifests/adjacency/selection/explained-overlap plus record-level identity **bound** to the current config hash, acquisition code hash, and on-disk manifest identities; `nqresearch.sources.require_provenance()` enforces it before any research preparation |
+
+Envelopes record `data_root = D:\nq-research\data`, one code hash, one config
+hash; generated from an uncommitted working tree (`git_sha = c74b825`), so a
+**post-commit re-stamp** of these artifacts is required after the acquisition
+commit.
 
 ## 6. Purchase gate for full two-year MBP-1 (§2.2, Milestone 0 item 14)
 
