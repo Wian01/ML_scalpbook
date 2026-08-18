@@ -644,3 +644,38 @@ in by the entry that creates the initial commit.
   pending Milestone 2 session QA; storage below preferred headroom; carried
   AL-0016 items.
 - **Commit:** pending (awaiting commit approval).
+
+## AL-0023 — Acquisition commit; artifacts re-stamped with its SHA
+
+- **Category:** protocol-relevant decision + artifact regeneration
+- **Actor:** Claude (Claude Code); commit and stamping sequence explicitly
+  approved by the user.
+- **Commit 1:** **`6ba5d4db4f0b8a69c49c76ebff07083eb468420f`** — "Two-year
+  MBP-1 acquisition: provenance registry, code-bound identity gate, safe
+  source selection" (exactly the 12 reviewed files; 1,945 insertions,
+  18 deletions; no data/ paths).
+- **Re-stamp:** `--part mbp1-acquisition` then `--part mbp1-overlap-records`
+  re-run after the commit. All eight artifact envelopes verified to record
+  `git_sha = 6ba5d4db4f0b8a69c49c76ebff07083eb468420f`, shared
+  `audit_code_hash 47836770ce095dc7422761d210d106ecb3f3d4dd6b5658340ebf54e1b8dce018`,
+  shared `config_hash 9b077200340925bfb5da9876f34cd6350ed496038ef714f14f0f76d588ba32d6`,
+  `data_root D:\nq-research\data`. The gate remained PASS throughout the
+  re-stamp (its evidence binding — config, acquisition code, manifest
+  identities — was unchanged; only the envelope SHA refreshed).
+- **Verified after stamping:** acquisition gate **PASS with 9/9 named
+  checks**; `require_provenance()` accepts the freshly stamped gate;
+  record-level identity unchanged — **11/11 overlap pairs, 115,583,040
+  records byte-identical**; **184/184 tests pass**.
+- **Final artifact statuses and SHA-256 (stamped generation):**
+  - `mbp1_source_inventory.json` WARN `64ef45658e5957d53e2a47f0aa07108227a5978994580ae9a53ee2a64016f87d`
+  - `mbp1_manifest_validation.json` PASS `fa2de0fadfadb5ae3e3114ba180c98bb9be0cfa844a0e9b10611f10bdacf7170`
+  - `mbp1_range_adjacency.json` PASS `74c8ad8b56f5033831d611405e17adf3e934dcca9af1eb902410b86d6d753eb3`
+  - `mbp1_sample_overlap.json` WARN `85647992326e565488f3ffc8c36037dc7745f6fc055c3ce4851a5c1f70658fb2`
+  - `mbp1_sample_overlap_record_level.json` PASS `13a0c40deeded87392d58d0180f1e317df76e356ff9010f470d2a698eaa6e0a1`
+  - `mbp1_source_selection.json` PASS `f1e1fd042cef158398977bfb63e884dd9b62bbc7fee9b7d9dd03b7e1be4cf15d`
+  - `storage_gate.json` WARN `bb47a53a9211b3523f035675d0ecde10892a4cdf686b83217cd58d7214beaaf1`
+  - `mbp1_acquisition_gate.json` **PASS** `aa56b4c8fc219d2880e8cf8872ad5c5c8d89a878ebd92257c41f2fc833c78f08`
+- **Untouched:** historical `qa/m0` artifacts, all raw vendor data on both
+  volumes, the old C: data tree, and the D:\Downloads ZIP. Nothing pushed.
+- **Commit:** this entry is Commit 2 (separate by design; Commit 1 is never
+  amended so the SHA recorded inside the artifacts stays valid).
