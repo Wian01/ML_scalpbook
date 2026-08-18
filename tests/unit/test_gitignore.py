@@ -9,11 +9,22 @@ from nqresearch import paths
 
 
 def _is_ignored(relpath: str) -> bool:
+    """git check-ignore: rc 0 = ignored, rc 1 = not ignored. Any other return
+    code is a Git EXECUTION failure (e.g. dubious-ownership under a different
+    account) and must fail loudly — treating it as 'not ignored' would let
+    the negative assertions pass vacuously."""
     out = subprocess.run(
         ["git", "-C", str(paths.ROOT), "check-ignore", "-q", relpath],
-        capture_output=True,
+        capture_output=True, text=True,
     )
-    return out.returncode == 0
+    if out.returncode == 0:
+        return True
+    if out.returncode == 1:
+        return False
+    raise RuntimeError(
+        f"git check-ignore failed (rc={out.returncode}) for {relpath!r}: "
+        f"{out.stderr.strip()}"
+    )
 
 
 class TestGitIgnore:

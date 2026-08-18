@@ -137,6 +137,9 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   MBO job also contains expected ES.FUT data, excluded from NQ research via
   instrument mappings. Results and gate status: `docs/data-specification.md` and
   `<data_root>/qa/m0/`; history: `docs/implementation-audit-log.md`.
+  (Superseded by the closeout below: with the effective calendar applied,
+  2026-07-03 is a COMPLETE shortened session — final inventory **77 NQ
+  sessions in 30 blocks**.)
 - Data lives on the dedicated D: volume (`data_root: D:/nq-research/data`).
   **The two-year MBP-1 purchase is complete (2026-08-18):** two exactly
   adjacent annual jobs (`GLBX-20260817-P3KX4KXDQF`, `GLBX-20260817-S9GCQWS6L8`)
@@ -146,9 +149,18 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   (`config/data/mbp1_sources.yaml` + `nqresearch.sources`); acquisition QA:
   `<data_root>/qa/mbp1_full_history/` and `docs/data-specification.md` §1a/§5.6.
   Parent symbology: outright/spread classification remains mandatory.
-- Other unresolved items: CME holiday calendar (WARN statuses, provisional
-  block IDs, 2026-07-03 classification); crossed-book burst 2026-08-10
-  11:31:58 CT pending session-phase/`status` classification; front/roll rule
-  under parent symbology (Milestone 2); MBO acquisition reasons undocumented
-  (spec §30); partition/holdout dates unfrozen pending full history.
+- **Milestone 0 closeout complete (commit `3c7aee5e`, AL-0028):** versioned
+  effective CME calendar integrated (baseline + official overrides,
+  config/data/cme_calendar*.yaml); full-history coverage audited (516
+  expected sessions: 507 PASS / 8 WARN / 0 FAIL, zero unexpected missing);
+  strictly causal front/roll rule defined (8 quarterly switches); MBO blocks
+  final: **77 sessions / 30 blocks**; partition proposal structurally valid
+  (DEV 318/23/8, SELECTION 100/23/11, HOLDOUT 98/31/11, SPANNING 0) but
+  **PROPOSED_NOT_ACTIVE, PROVISIONAL_DOCUMENT_VERIFICATION_PENDING,
+  activation_ready=false**. Current state: data-spec §6a/§6b + AL-0028.
+- Remaining open items: official-CME document-level calendar verification
+  (incl. the Jan-9 PDF SHA); explicit human partition activation approval;
+  crossed-book burst 2026-08-10 11:31:58 CT pending session-phase/`status`
+  classification (Milestone 2); remaining canonical §12 QA fields as a
+  mandatory Milestone 2 gate; MBO acquisition reasons UNKNOWN_NOT_RECORDED.
 - No features, labels, sampling, models, experiments, or holdout definition exist yet.

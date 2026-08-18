@@ -227,8 +227,10 @@ extrapolation a wide-uncertainty estimate.
   `ts_event` monotonic non-decreasing within every file; no backward sequence
   moves flagged.
 - Coverage: the only missing weekday in two years is **2025-04-18 (Good
-  Friday — CME holiday)**. WARN status reflects only that the holiday calendar
-  is not yet machine-integrated; effective coverage is complete.
+  Friday — CME holiday)**. *(Pre-closeout history: the WARN reflected the
+  then-missing machine calendar; the effective calendar has since been
+  integrated — §6a — and classifies Good Friday as a pre-RTH short session.)*
+  Effective coverage is complete.
 
 ### 5.3 MBP-1 vs trades reconciliation — status **PASS (exact)**
 
@@ -278,10 +280,11 @@ Two artifacts:
 **Deep-audit results (repaired data, 2026-08-17: decoded 2,005,045,979 records
 across all 85 files):**
 
-- **Authoritative NQ MBO session inventory: 76 full-RTH sessions in 31
+- **NQ MBO session inventory (pre-closeout): 76 full-RTH sessions in 31
   provisional blocks**, plus **1 partial session**: 2026-07-03 (54% RTH span —
-  Independence Day half-session; reclassifies as a complete *shortened*
-  session once the holiday calendar exists). 106 additional dates observed in
+  Independence Day half-session; *since reclassified COMPLETE_SHORTENED under
+  the effective calendar — current inventory is 77 sessions / 30 blocks,
+  §6a*). 106 additional dates observed in
   decoded timestamps are initialization artifacts, not sessions (listed in the
   artifact).
 - **Change vs the pre-repair result (70 full + 3 partial, 30 blocks):** the
@@ -302,10 +305,12 @@ across all 85 files):**
   4,952,807 NQ calendar-spread rows across all files, all recorded per file in
   QA metadata. Every observed instrument maps to a symbol; every file has NQ
   outright data.
-- Block contiguity rule: sessions are contiguous when no Mon–Fri weekday lies
-  strictly between them. **Open item:** the CME holiday calendar is not yet
-  integrated; blocks spanning a holiday may be over-split. Block IDs are frozen
-  only after the deep audit and holiday calendar (before any MBO_LAB research use).
+- *(Pre-closeout history, superseded by §6a:)* block contiguity originally
+  used a weekday-only rule pending the calendar; the closeout recomputed
+  blocks under the versioned effective calendar (2026-07-03 reclassified a
+  COMPLETE shortened session → **77 sessions / 30 blocks**, state
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING). Current state: §6a and
+  AL-0028.
 - **Unresolved:** the reason each block was acquired is not documented in the data
   directories; per canonical §30 this must be supplied by the researcher, and the
   MBO_LAB selection-bias comparison (volatility/volume/event-day distribution vs the
@@ -316,9 +321,10 @@ across all 85 files):**
 
 - Repeatable gate: `nqr data storage-gate` measures the volume holding the
   configured data root (artifact `storage_gate.json`).
-- **Current (post-purchase): 1,847 GB free of 2,048 GB — WARN**: the 1,000 GB
-  required minimum is met; the 2,000 GB preferred headroom is not (acceptable
-  per policy since ≥1 TB remains free).
+- **Current (2026-08-18, post-closeout re-measure): 1,720.9 GB free of
+  2,048 GB — WARN**: the 1,000 GB required minimum is met; the 2,000 GB
+  preferred headroom is not (acceptable per policy since ≥1 TB remains free;
+  a separate non-project directory also occupies space on D:).
 - History (preserved): C:-volume runs measured 263.2–284.6 GB (FAIL) and
   correctly blocked the purchase; after migration to `D:/nq-research/data`
   (2026-08-17) the pre-purchase gate read 2,005.5 GB (PASS); the two-year
@@ -335,24 +341,25 @@ across all 85 files):**
 | mbp1_sample_overlap | WARN (explained) | File hashes differ 2–9 bytes/file (per-request DBN container metadata — cross-request file-hash identity is structurally unattainable); authoritative check is the record-level artifact |
 | mbp1_sample_overlap_record_level | **PASS** | All 11 expected day-pairs (from the validated sample manifest) decoded and byte-compared: **115,583,040 records, all identical**; fail-safe (zero/missing/multiple counterparts, incomplete comparisons, dtype or byte mismatches all FAIL); binding embedded |
 | mbp1_source_selection | PASS | 625 canonical research files, 2024-08-18 → 2026-08-16, every logical partition unique, ownership tracked, zero sample files in research input (resolved-path check) |
-| storage_gate (post-purchase) | WARN | 1,847 GB free of 2,048 GB: **meets the 1,000 GB required minimum; below the 2,000 GB preferred headroom** — acceptable per policy since ≥1 TB remains free |
+| storage_gate (post-purchase) | WARN | currently 1,720.9 GB free of 2,048 GB: **meets the 1,000 GB required minimum; below the 2,000 GB preferred headroom** — acceptable per policy since ≥1 TB remains free |
 | **mbp1_acquisition_gate** | **PASS** | Cohesive gate: all 9 checks PASS — inventory/manifests/adjacency/selection/explained-overlap plus record-level identity **bound** to the current config hash, acquisition code hash, and on-disk manifest identities; `nqresearch.sources.require_provenance()` enforces it before any research preparation |
 
 Provenance history of these eight artifacts: originally stamped to the
-acquisition commit `6ba5d4d` (AL-0023; those hashes remain recorded there).
-They were **necessarily regenerated on 2026-08-18** when the CME calendar
-files joined the effective configuration hash (the acquisition gate binds to
-that hash and must re-bind on any config change); current envelopes carry the
-new config hash with `git_sha = 1c0a774` (pushed HEAD; working tree holds
-uncommitted closeout code). **All eight are part of the post-closeout-commit
-re-stamp sequence.**
+acquisition commit `6ba5d4d` (AL-0023), regenerated several times on
+2026-08-18 as the calendar files joined the effective configuration hash
+(interim stamps under `1c0a774`; AL-0026/AL-0027). **Current state: all
+twelve QA artifacts (these eight plus the four closeout artifacts) are
+stamped to the closeout commit `3c7aee5e0f240b69d136ff341b608644dafc7a52`
+under one config hash and one code hash — AL-0028 records the final
+hashes.**
 
 ## 6. Purchase gate for full two-year MBP-1 (§2.2, Milestone 0 item 14) — CLOSED
 
 **The purchase is complete and validated** (§1a, §5.6): the two annual
 canonical jobs are on disk, 642/642 manifest files hash-verified, the
 acquisition/provenance gate is PASS (9/9 named checks), and all artifacts are
-stamped to commit `6ba5d4d`. The gate below is preserved as the historical
+currently stamped to the closeout commit `3c7aee5e` (AL-0028; earlier stamps:
+`6ba5d4d` per AL-0023). The gate below is preserved as the historical
 pre-purchase record (its verdict authorized the purchase on 2026-08-17):
 
 | Component | Status | Basis |
@@ -489,34 +496,41 @@ out-of-range sessions (2026-08-17 edge) are excluded from the series.
   **8 switches** — the 8 quarterly rolls (Sep/Dec/Mar/Jun ×2 years) — under
   the proposed rule in §6a; per-session front + roll-week flags emitted.
 
-## 7. Unresolved assumptions and open items
+## 7. Unresolved assumptions and open items (current, post-closeout)
 
-1. *(Resolved 2026-08-17.)* **Storage** — the D: data volume passes the gate
-   (§5.5); re-run `nqr data storage-gate` before each large download tranche.
-2. **CME holiday calendar** — not yet machine-integrated. Affects: trades-coverage
-   WARN (Good Friday), MBO block contiguity (blocks may be over-split at
-   holidays), and future session-completeness QA. Required before MBO block IDs
-   are frozen and before partition dates are frozen.
+Current state reference: §6a/§6b and audit-log AL-0028.
+
+1. **Official-CME document-level calendar verification** — all 9 recurring
+   holiday groups are OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING and the
+   Jan-9 PDF SHA-256 awaits interactive retrieval (CME returns 403 to
+   scripts). Until complete: effective calendar, MBO blocks, and partition
+   dates stay PROVISIONAL_DOCUMENT_VERIFICATION_PENDING.
+2. **Partition activation** — the proposal is structurally valid (all gates
+   PASS) but PROPOSED_NOT_ACTIVE with activation_ready=false; requires
+   document verification (item 1) plus explicit human approval. The holdout
+   boundary 2026-04-01 remains TENTATIVE until that approval.
 3. **Crossed-book states** — presumed halt/auction/pre-open indicative states;
    classification needs session-phase logic and possibly the vendor `status`
-   schema for halt windows (notably 2026-08-10 11:31:58 CT). Must be resolved in
-   Milestone 2 normalization design.
-4. **Front-contract/roll rule** — parent symbology means no vendor continuous
-   selector exists; a volume-leading front/roll definition must be specified and
-   verified when multi-month data exists (the two-week sample contains no roll;
-   NQU6 led throughout).
-5. **MBO acquisition reasons** (§30) — not documented in the data; must be
-   supplied by the researcher. MBO_LAB selection-bias comparison deferred until
-   the broad two-year dataset exists.
-6. **Partition dates (DEV/SELECTION/HOLDOUT)** — cannot be frozen yet: they
-   require the full two-year MBP-1 coverage plus the holiday calendar and MBO
-   block placement (canonical §60 items 11–12). The holdout boundary remains
-   TENTATIVE (~2026-04-01 discussed, not final).
-7. **Sequence-number semantics** — treated as channel-level and diagnostic-only;
-   initialization records carry stale sequence values. No mid-stream anomalies
-   observed; semantics to be revisited only if future files disagree.
-8. **Seasonality of storage estimate** — extrapolated from August; re-estimate
-   after the first full-history download tranche.
+   schema for halt windows (notably 2026-08-10 11:31:58 CT). Milestone 2.
+4. **Remaining canonical §12 QA fields** (sequence min/max, duplicates,
+   non-negative quantities, missing values, spread/tick sanity, crossed/locked
+   phase classification, roll-proximity joins, §13 per-session
+   reconciliation) — mandatory Milestone 2 gate before research eligibility.
+5. **Front/roll rule** — defined and computed (strictly causal, §6a/§6b) but
+   still PROPOSED pending review sign-off recorded with partition approval.
+6. **MBO acquisition reasons** (§30) — UNKNOWN_NOT_RECORDED; MBO_LAB
+   selection-bias comparison now unblocked by the full corpus but not yet
+   performed (Milestone 2+).
+7. **2025-01-09** — official special closure encoded via override; session
+   retained as WARN pending an explicit eligibility decision.
+8. **Storage** — 1,720.9 GB free (WARN, ≥1 TB met); re-run the gate before
+   Milestone 2's large writes.
+
+Historical (superseded) open-item lists are preserved in this document's
+earlier sections and in audit-log entries AL-0004…AL-0027-A; the items about
+a missing calendar, undefined roll rule, and unpurchasable/absent full
+history are **resolved by the closeout** and retained above only as history.
+
 9. *(Resolved 2026-08-17 — retained pointer only.)* Items previously listed
    here — two MBO sessions with apparently partial vendor coverage and three
    MBO job directories without manifests — were both symptoms of **incomplete

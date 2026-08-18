@@ -991,3 +991,35 @@ in by the entry that creates the initial commit.
   approval. Raw vendor data untouched; nothing pushed.
 - **Commit:** this entry is the audit-log-only second commit (two-commit
   stamping pattern; the closeout commit is never amended).
+
+## AL-0029 — Post-closeout documentation synchronization; gitignore-test hardening
+
+- **Category:** audit/review finding + documentation correction + test fix
+- **Stale current-status material corrected** (history preserved and labeled
+  pre-closeout/superseded, pointing to §6a/§6b and AL-0028): AGENTS.md
+  (76+1/31 inventory and pending-calendar/roll/partition items → closeout
+  state: 77/30, calendar integrated, causal roll defined, partitions
+  PROPOSED_NOT_ACTIVE with activation_ready=false); CLAUDE.md ("not yet
+  frozen (holiday calendar pending)" → closeout state); data-spec (§5.2
+  Good-Friday WARN note, §5.4 pre-closeout inventory labels, §5.5/§5.6
+  storage 1,847 → current 1,720.9 GB, artifact stamps 6ba5d4d/1c0a774 →
+  current 3c7aee5e with prior stamps as history, §6 stamp reference, §7
+  unresolved list rewritten to the accurate post-closeout set);
+  holdout-policy.md (HOLDOUT dates now exist as a structurally valid
+  proposal that remains PROPOSED_NOT_ACTIVE /
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING / activation_ready=false — no
+  longer described as absent).
+- **Test hardening (review finding from a read-only reviewer account where
+  Git reported dubious ownership):** `test_gitignore._is_ignored()` treated
+  every nonzero return code as "not ignored", letting negative assertions
+  pass vacuously on Git execution failure. Now rc 0 = ignored, rc 1 = not
+  ignored, anything else raises loudly with Git's stderr.
+- **No semantic changes:** code/config/calendar semantics, artifacts, raw
+  data, partition activation, and holdout access untouched; the 12 artifacts
+  deliberately NOT regenerated. Verified after the edits: effective config
+  hash and audit code hash **unchanged**
+  (`95a9dd78…6874163d` / package hash stable for the artifact-relevant
+  modules — docs and tests are outside both), and `require_provenance()`
+  still PASSes against the live gate.
+- **Tests:** full suite passing (count in the correction-commit report).
+- **Commit:** this synchronization + AL-0029 as one correction commit.

@@ -150,5 +150,12 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   globbing of raw/mbp1). Acquisition QA: `<data_root>/qa/mbp1_full_history/`.
   Parent-symbology reminder: the corpus contains outrights AND spreads;
   outright/spread classification remains mandatory downstream.
-- Partition dates and MBO block IDs are not yet frozen (holiday calendar pending).
+- **Milestone 0 closeout complete (commit `3c7aee5e`, AL-0028):** effective
+  CME calendar integrated (baseline + official overrides); full-history
+  coverage 507 PASS / 8 WARN / 0 FAIL of 516 expected sessions; causal
+  front/roll rule defined; MBO blocks final (77 sessions / 30 blocks);
+  partition proposal structurally valid but **PROPOSED_NOT_ACTIVE,
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING, activation_ready=false** —
+  activation requires document-level CME verification + explicit human
+  approval. Current state: `docs/data-specification.md` §6a/§6b.
 - No features, labels, sampling, models, experiments, or holdout definition exist yet.

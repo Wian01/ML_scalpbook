@@ -12,7 +12,14 @@ outcomes**. A boundary near `2026-04-01` was discussed during planning but is NO
 until Milestone 0 establishes exact broad-data coverage. Any MBO session falling inside
 HOLDOUT is itself HOLDOUT and is excluded from all MBO discovery and ladder development.
 
-**Status: HOLDOUT dates are not yet frozen.** Freezing them is a Milestone 0 deliverable
+**Status: a structurally valid HOLDOUT proposal now exists but is NOT
+active.** The Milestone 0 closeout (data-spec §6a/§6b, audit-log AL-0028)
+proposes HOLDOUT = 2026-04-01 → 2026-08-14 (98 trading days ≈ 4.5 months,
+31 MBO sessions / 11 whole blocks) with all structural partition gates
+passing; the proposal remains `PROPOSED_NOT_ACTIVE`,
+`PROVISIONAL_DOCUMENT_VERIFICATION_PENDING`, `activation_ready=false` until
+official-CME document verification completes and explicit human approval is
+recorded. Historical note: freezing the dates was a Milestone 0 deliverable
 (canonical §60 items 11–12) and must precede feature research.
 
 ## 2. Prohibitions during ordinary development (§6.3)
