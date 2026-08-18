@@ -940,3 +940,54 @@ in by the entry that creates the initial commit.
 - **Tests:** 218/218 passing.
 - **Commit:** pending independent review; artifacts on disk still carry the
   pre-addendum hashes by design until the post-commit re-stamp.
+
+## AL-0028 — Milestone 0 closeout commit; all 12 artifacts re-stamped
+
+- **Category:** protocol-relevant decision + artifact regeneration
+- **Actor:** Claude (Claude Code); commit and re-stamp sequence explicitly
+  approved by the user.
+- **Closeout commit (immutable, never amended):**
+  **`3c7aee5e0f240b69d136ff341b608644dafc7a52`** — "Milestone 0 closeout:
+  calendar, coverage, causal rolls, MBO blocks, partition proposal"
+  (17 files, 2,078 insertions, 29 deletions; no data/ paths).
+- **Re-stamp:** all 12 artifacts regenerated exactly once, in dependency
+  order (acquisition validation → record-level overlap → coverage + causal
+  front series → MBO blocks + partition finalization). The acquisition gate
+  FAILed while its evidence was stale and finished **PASS with 9/9 named
+  checks** after the record-level evidence regenerated — as designed.
+- **Verified invariants:** all 12 envelopes share config hash
+  `95a9dd78ae8beca9f128af2aa49256fdf103d7b300c568331b7eb7af6874163d`, code
+  hash `92ae81c5d85ff82cbf3141e7af3da158b0e803110124d7a780f7c56b9d06f74f`,
+  and git_sha `3c7aee5e0f240b69d136ff341b608644dafc7a52`. Manifest
+  validation 642/642 PASS, zero failures. Overlap 11/11 pairs,
+  115,583,040 records identical. Coverage: 516 expected, **507 PASS /
+  8 WARN / 0 FAIL**, zero unexpected missing, one expected pre-RTH Good
+  Friday init-only session (2025-04-18). Front series strictly causal,
+  8 switches, 2026-08-17 absent/excluded. MBO 77 sessions / 30 blocks.
+  Partitions DEV 318/23/8, SELECTION 100/23/11, HOLDOUT 98/31/11,
+  SPANNING 0; all three structural gates PASS. State
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING with activation_ready=false on
+  both closeout artifacts. Storage 1,720.9 GB free (WARN — ≥1 TB minimum
+  met).
+- **Artifact SHA-256 (final, post-stamp):**
+  - `mbp1_acquisition_gate.json` PASS `05ffeab8b48dc4e6b8f4774f1bc5e446cbc2c59d64adfaac2f7bcb45475a1541`
+  - `mbp1_manifest_validation.json` PASS `878db80d43d3d74ea03cfa4aafc5a0b2b6bfafa60df32678c5e87b3e11fee60f`
+  - `mbp1_range_adjacency.json` PASS `f98888f1b51c85973662aa9f0098370b6e669ca0b28ceaff3c69746b19a2b1c5`
+  - `mbp1_sample_overlap.json` WARN `e1e23eebd55fd17b125c013b7fd6386568efed6361cfbcc240b902c7ccf79a9e`
+  - `mbp1_sample_overlap_record_level.json` PASS `f3c0d63af760490ba36ad0e90c2e158f867c099014f0ef10bf210b441078543f`
+  - `mbp1_source_inventory.json` WARN `189137a5b18ef8da576d9b901e50644e1b78d31dfdcc1f58b0040b54c1e6f2b6`
+  - `mbp1_source_selection.json` PASS `2e969249a76adc7effe7d0aa18c807da8fcca101afd33727faa414142479cbfb`
+  - `storage_gate.json` WARN `442d9e5d2570edc2a240b7420a4adeba0bbeda72ccf166c734f92410a67690ee`
+  - `mbo_blocks_frozen.json` PASS `a1e2849f78ff6592eee989493d06b46e5123ae1a1ce71b104888036a05dcb3f3`
+  - `mbp1_front_contract_series.json` PASS `4b6095e94de66e9825c80be1e9dd3491d1d23476fb5c77d2dcac3267b428136a`
+  - `mbp1_full_history_coverage.json` WARN `03545b61595bf3375ab6880d4b7ce3e5d88fa61522291911e43dc3f6b9ea6687`
+  - `partition_proposal.json` PASS `8c0d62b2330ec4afed6a5ada0ed53b0c91c9d968eb99e3646d48a95ce993e8ba`
+- **Tests:** 218/218 passing after regeneration.
+- **Unresolved:** official-CME document-level verification of the baseline
+  holiday groups (all OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING) and the
+  Jan-9 PDF SHA-256 (manual retrieval; CME returns 403 to scripts).
+  **Partitions remain PROPOSED_NOT_ACTIVE and unactivated**; activation
+  requires document verification + structural PASS + explicit human
+  approval. Raw vendor data untouched; nothing pushed.
+- **Commit:** this entry is the audit-log-only second commit (two-commit
+  stamping pattern; the closeout commit is never amended).
