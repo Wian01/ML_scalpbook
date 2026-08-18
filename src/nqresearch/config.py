@@ -228,11 +228,23 @@ def effective_config_hash(repo_root: Path | None = None) -> str:
     dp = load_data_paths_config(root)
     sc = load_session_config(root)
     reg = load_mbp1_sources(root)
+    cal_path = root / "config" / "data" / "cme_calendar.yaml"
+    cal_sha = (
+        hashlib.sha256(cal_path.read_bytes()).hexdigest()
+        if cal_path.is_file() else None
+    )
+    ov_path = root / "config" / "data" / "cme_calendar_overrides.yaml"
+    ov_sha = (
+        hashlib.sha256(ov_path.read_bytes()).hexdigest()
+        if ov_path.is_file() else None
+    )
     payload = {
         "data_paths": dp.model_dump(),
         "sessions": sc.model_dump(),
         "resolved_data_root": str(dp.resolved_data_root(root)),
         "mbp1_sources": reg.model_dump(by_alias=True),
+        "cme_calendar_sha256": cal_sha,
+        "cme_calendar_overrides_sha256": ov_sha,
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()

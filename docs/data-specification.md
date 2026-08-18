@@ -312,22 +312,18 @@ across all 85 files):**
   broad population) requires the full broad dataset, so it is deferred until the
   two-year MBP-1 history exists.
 
-### 5.5 Storage check (§2.2, §59; Milestone 0 item 16) — **PASS** (on D:)
+### 5.5 Storage check (§2.2, §59; Milestone 0 item 16) — current: **WARN** (≥1 TB met)
 
 - Repeatable gate: `nqr data storage-gate` measures the volume holding the
-  configured data root (artifact `storage_gate.json`). After migration to
-  `D:/nq-research/data` (2026-08-17): **2,005.5 GB free — PASS** (≥ 1000 GB
-  required minimum AND ≥ 2000 GB preferred headroom, the latter narrowly).
-  History: earlier runs against the C: volume measured 263.2–284.6 GB free
-  (FAIL) and correctly blocked the purchase until the D: volume existed.
-- Two-year MBP-1 extrapolation from the sample (August weekday mean ≈ 243 MB
-  compressed / 922 MB decoded DBN × 504 trading days): **≈122 GB compressed,
-  ≈465 GB decoded** — consistent with the spec's ~361 GB raw planning figure,
-  with wide seasonal uncertainty (August is a low-activity month).
-- Canonical requirement before the full purchase: **≥1 TB free NVMe (2 TB
-  preferred)** to hold raw MBP-1 + normalized Parquet + QA + features + existing
-  MBO (~36 GB after the re-download) + experiment artifacts. The D: data volume
-  meets both thresholds.
+  configured data root (artifact `storage_gate.json`).
+- **Current (post-purchase): 1,847 GB free of 2,048 GB — WARN**: the 1,000 GB
+  required minimum is met; the 2,000 GB preferred headroom is not (acceptable
+  per policy since ≥1 TB remains free).
+- History (preserved): C:-volume runs measured 263.2–284.6 GB (FAIL) and
+  correctly blocked the purchase; after migration to `D:/nq-research/data`
+  (2026-08-17) the pre-purchase gate read 2,005.5 GB (PASS); the two-year
+  purchase (~113.5 GB compressed) then consumed the difference. The sample's
+  ~122 GB compressed extrapolation was accurate (actual: 113.5 GB).
 
 ### 5.6 Post-purchase acquisition validation (2026-08-18; `<data_root>/qa/mbp1_full_history/`)
 
@@ -342,17 +338,22 @@ across all 85 files):**
 | storage_gate (post-purchase) | WARN | 1,847 GB free of 2,048 GB: **meets the 1,000 GB required minimum; below the 2,000 GB preferred headroom** — acceptable per policy since ≥1 TB remains free |
 | **mbp1_acquisition_gate** | **PASS** | Cohesive gate: all 9 checks PASS — inventory/manifests/adjacency/selection/explained-overlap plus record-level identity **bound** to the current config hash, acquisition code hash, and on-disk manifest identities; `nqresearch.sources.require_provenance()` enforces it before any research preparation |
 
-Envelopes record `data_root = D:\nq-research\data`, one code hash, one config
-hash; generated from an uncommitted working tree (`git_sha = c74b825`), so a
-**post-commit re-stamp** of these artifacts is required after the acquisition
-commit.
+Provenance history of these eight artifacts: originally stamped to the
+acquisition commit `6ba5d4d` (AL-0023; those hashes remain recorded there).
+They were **necessarily regenerated on 2026-08-18** when the CME calendar
+files joined the effective configuration hash (the acquisition gate binds to
+that hash and must re-bind on any config change); current envelopes carry the
+new config hash with `git_sha = 1c0a774` (pushed HEAD; working tree holds
+uncommitted closeout code). **All eight are part of the post-closeout-commit
+re-stamp sequence.**
 
-## 6. Purchase gate for full two-year MBP-1 (§2.2, Milestone 0 item 14)
+## 6. Purchase gate for full two-year MBP-1 (§2.2, Milestone 0 item 14) — CLOSED
 
-**Gate verdict: PASS — the purchase is unblocked** (as of the 2026-08-17
-migration to the D: data volume). Remaining WARNs are documented
-qualifications, not blockers. The two-year history is intentionally NOT yet
-purchased; nothing in the audit treats its absence as missing data.
+**The purchase is complete and validated** (§1a, §5.6): the two annual
+canonical jobs are on disk, 642/642 manifest files hash-verified, the
+acquisition/provenance gate is PASS (9/9 named checks), and all artifacts are
+stamped to commit `6ba5d4d`. The gate below is preserved as the historical
+pre-purchase record (its verdict authorized the purchase on 2026-08-17):
 
 | Component | Status | Basis |
 |---|---|---|
@@ -363,10 +364,130 @@ purchased; nothing in the audit treats its absence as missing data.
 | Storage precondition (≥1 TB free NVMe) | **PASS** | §5.5 — 2,005.5 GB free on the D: data volume (also meets the 2 TB preferred headroom) |
 | Sample representativeness | **WARN** | two August weeks; low-vol season; one Monday contains an unexplained mid-RTH crossed-book burst pending status-data classification |
 
-All gate components now PASS (with documented WARN qualifications). The
-purchase of the two-year MBP-1 history may proceed when the researcher decides;
-per §59, monitor free space during the download and re-run
-`nqr data storage-gate` before each large tranche.
+*(Historical note: all gate components PASSed with documented WARN
+qualifications; the purchase proceeded on 2026-08-18 and §5.6 records its
+validation. Current storage status: §5.5.)*
+
+## 6a. Milestone 0 closeout (2026-08-18; artifacts: `<data_root>/qa/m0_closeout/`)
+
+- **CME calendar (baseline + official overrides)**: the versioned snapshot
+  `config/data/cme_calendar.yaml` (pandas_market_calendars 5.4.0 "CME Globex
+  Equity", pinned in uv.lock, content SHA-256 in the snapshot meta) is a
+  **reproducible baseline, not authoritative by itself**; the attributable
+  official-CME override file `config/data/cme_calendar_overrides.yaml` wins
+  on conflict, and both files are in the effective config hash. Encoded
+  override: **2025-01-09 National Day of Mourning — 08:30 CT close, zero
+  expected RTH** (official CME schedule; source references in the override
+  meta; observed data confirms 1.3M ETH rows, zero RTH). Baseline facts: 626
+  trading days 2024-08-01 → 2026-12-31; Christmas/New Year full closures; 25
+  early closes incl. **08:15 CT Good Friday short sessions** — all 25 early
+  closes cross-checked observationally against decoded coverage (25/25
+  consistent); document-level verification of each holiday PDF remains an
+  open review item.
+- **Front-contract/roll rule (PROPOSED, pending review)** — `nqresearch/rolls.py`:
+  **strictly causal** — the front effective for session S is decided from the
+  PREVIOUS completed eligible session's outright volumes (matching Databento's
+  documented previous-day volume ranking for `.v.0`-style continuous
+  contracts); session S's own completed volume never selects S's contract;
+  the first corpus session is explicitly UNRESOLVED/ineligible (no look-ahead
+  seed). Spreads excluded before volume calculation; switches only at session
+  boundaries; **monotone-expiry** (never backward — deterministic, no tunable
+  hysteresis); ties retain the incumbent; insufficient-volume sessions (e.g.
+  Good Friday) retain the incumbent with `INSUFFICIENT_VOLUME`; prices never
+  back-adjusted; switch records (with `decided_from_session`) are the
+  authoritative boundaries for §8 window-crossing drops; roll-week = ±3
+  sessions around a switch. Observed switch dates vs Databento v.0 semantics
+  and CME customary roll timing: §6b.
+- **MBO blocks — state `PROVISIONAL_DOCUMENT_VERIFICATION_PENDING`,
+  `activation_ready=false`** (`mbo_blocks_frozen.json`): **77 NQ
+  sessions in 30 blocks** — contiguity under the versioned effective calendar
+  (artifact bound to baseline + overrides + merged calendar SHA-256);
+  2026-07-03 reclassified `COMPLETE_SHORTENED_SESSION` (observed 3.5 h RTH ==
+  calendar expectation), merging the 2026-06-29 → 2026-07-06 block.
+  **Provisional until the document-level verification of the baseline
+  calendar completes** (overrides meta `baseline_verification`); the same
+  proviso applies to the partition proposal
+  (`calendar_verification_state=PROVISIONAL_DOCUMENT_VERIFICATION_PENDING`,
+  `activation_ready=false`). `activation_ready` may become true only when
+  official CME document verification is complete AND all structural partition
+  checks PASS AND explicit human partition approval is recorded; artifact
+  `status` expresses computational validity only, never activation readiness.
+  Acquisition reasons: `UNKNOWN_NOT_RECORDED_PENDING_USER_INPUT`.
+- **Partition proposal** (`partition_proposal.json`, **PROPOSED_NOT_ACTIVE** —
+  requires explicit human approval; revised per review so **no MBO block
+  spans a partition boundary**, enforced by a mandatory
+  `no_partition_spanning_mbo_blocks` check that must refuse activation while
+  non-empty): DEV 2024-08-19 → 2025-11-07; SELECTION 2025-11-10 →
+  2026-03-31; HOLDOUT 2026-04-01 → 2026-08-14 (**tentative** per canonical
+  §5.3); FORWARD from 2026-08-17 with the 2026-08-17 partial edge session
+  explicitly ineligible. Every boundary validated as a CME trading day.
+  Recalculated trading-day and MBO counts: §6b.
+- **Full-history session-coverage audit** (`mbp1_full_history_coverage.json`,
+  registry-scoped to canonical sources only, provenance-gated, resumable,
+  disk-guarded): results in §6b below.
+
+## 6b. Full-history coverage results (canonical corpus; final, corrected accounting)
+
+**Evaluation range 2024-08-19 → 2026-08-14 (516 expected sessions): 507 PASS,
+8 WARN, 1 expected Good Friday pre-RTH shortened/init-only session
+(2025-04-18), zero unexpected missing, zero FAIL.** The 8 WARNs: 7 vendor-
+degraded weekday dates (all with full expected RTH spans and normal activity)
+plus 2025-01-09 `OFFICIAL_SPECIAL_CLOSURE_NO_RTH` (per the official CME
+override). **2026-08-17 is reported separately as an out-of-window partial
+edge session** (`EDGE_PARTIAL_QUERY_BOUNDARY`), excluded from the headline
+counters and explicitly ineligible for FORWARD.
+
+**Timestamp order:** zero within-file mid-stream disorder AND zero cross-file
+order violations across the corpus (fresh records; a dedicated cross-file
+monotonicity check backs the claim).
+
+**Scope:** this artifact is the full-history *coverage* audit, NOT the
+complete canonical §12 QA layer. Remaining §12 fields (sequence min/max,
+duplicates, non-negative quantities, missing values, spread/tick sanity,
+crossed/locked session-phase classification, roll-proximity joins, §13
+per-session reconciliation) are a **mandatory Milestone 2 gate** before any
+session becomes research-eligible (recorded in the artifact).
+
+**Causal front-contract series** (strictly previous-session volumes): 8
+switches, each recording its `decided_from_session`:
+2024-09-17 NQU4→NQZ4, 2024-12-18 NQZ4→NQH5, 2025-03-19 NQH5→NQM5,
+2025-06-17 NQM5→NQU5, 2025-09-17 NQU5→NQZ5, 2025-12-16 NQZ5→NQH6,
+2026-03-17 NQH6→NQM6, 2026-06-16 NQM6→NQU6. Comparison note (recorded, not
+forced): **CME's official equity-index roll date is the MONDAY before the
+third Friday** (cmegroup.com/trading/equity-index/rolldates.html). The
+causal volume-based switches lag those official Monday dates by **1–2
+trading sessions** (Mondays 2024-09-16, 2024-12-16, 2025-03-17, 2025-06-16,
+2025-09-15, 2025-12-15, 2026-03-16, 2026-06-15 → observed switches +1, +2,
++2, +1, +2, +1, +1, +1 sessions respectively) — the expected difference
+between the official roll date and previous-day-volume `.v.0` semantics.
+The first corpus session (2024-08-19) is UNRESOLVED/ineligible by rule, and
+out-of-range sessions (2026-08-17 edge) are excluded from the series.
+
+### Superseded first-pass results (history)
+
+- **5,401,908,864 fresh records decoded across all 625 canonical files**
+  (~432 GB decoded; 4,651 file-leading initialization records excluded from
+  session statistics per their documented stale-timestamp semantics).
+- **516 expected complete sessions (2024-08-19 → 2026-08-14): zero missing,
+  507 PASS, 9 WARN, 0 FAIL.** 105 weekend/holiday pre-open remnant dates
+  correctly classified as session-open mechanics, not sessions.
+- After initialization-record filtering, **mid-stream `ts_event` disorder is
+  ZERO across the entire corpus**; zero zero-size trades; zero unknown flag
+  bits; 21,808 crossed F_LAST outright states corpus-wide (~35/session,
+  consistent with halt/pre-open semantics; Milestone 2 session-phase item).
+- **All 11 vendor-degraded dates explicitly assessed**: the 7 weekday dates
+  with data have FULL expected RTH spans and normal activity (e.g.
+  2026-03-16: 19.8M rows) — flags retained as WARN reason codes, no coverage
+  impact; 2 are Saturdays without files; 2 (2026-01-31*, 2026-03-21*) —
+  see artifact. WARN sessions: 7 degraded + 2025-01-09
+  `NO_RTH_DATA_CALENDAR_MISMATCH` (1.3M ETH rows, zero RTH — consistent with
+  the National Day of Mourning closure, not encoded by the calendar source;
+  snapshot deliberately not hand-patched; review item) + 2026-08-17
+  `EDGE_PARTIAL_QUERY_BOUNDARY`. Good Friday 2025-04-18: WARN
+  (initialization-only file; session closes 08:15 CT before RTH).
+- **Front-contract series** (`mbp1_front_contract_series.json`): exactly
+  **8 switches** — the 8 quarterly rolls (Sep/Dec/Mar/Jun ×2 years) — under
+  the proposed rule in §6a; per-session front + roll-week flags emitted.
 
 ## 7. Unresolved assumptions and open items
 

@@ -10,7 +10,8 @@ from nqresearch.qa import status as st
 from nqresearch.qa.report import write_artifact
 
 AUDIT_PARTS = ["storage", "manifests", "mbp1", "trades", "mbo", "mbo-deep",
-               "reconcile", "mbp1-acquisition", "mbp1-overlap-records", "all"]
+               "reconcile", "mbp1-acquisition", "mbp1-overlap-records",
+               "mbp1-coverage", "closeout-finalize", "all"]
 # NOTE: "all" covers the Milestone 0 parts; "mbp1-acquisition" is explicit-only
 # so acquisition artifacts under qa/mbp1_full_history/ are regenerated
 # deliberately, never as a side effect.
@@ -152,6 +153,59 @@ def _run_audit(part: str, chunk_rows: int) -> int:
         p = write_artifact(gate, out_dir, gate["artifact"], paths.ROOT)
         statuses["acquisition-gate"] = gate["status"]
         print(f"[acq] gate: {gate['status']} -> {p}", flush=True)
+
+    if part == "mbp1-coverage":
+        from nqresearch.qa.full_history_audit import run_coverage
+        from nqresearch.rolls import compute_front_series
+
+        out_dir = paths.qa() / "m0_closeout"
+        print("[closeout] full-history coverage audit (625 canonical files) ...",
+              flush=True)
+        result = run_coverage(paths.data_root(), chunk_rows,
+                              cache_dir=out_dir / "cache" / "coverage")
+        front_vols = result.pop("front_volumes")
+        p = write_artifact(result, out_dir, "mbp1_full_history_coverage", paths.ROOT)
+        statuses["coverage"] = result["status"]
+        print(f"[closeout] coverage: {result['status']} -> {p}", flush=True)
+        front = compute_front_series(front_vols)
+        front_payload = {
+            "artifact": "mbp1_front_contract_series",
+            "rule": "STRICTLY CAUSAL previous-session volume-leading outright, "
+                    "session-boundary switches, monotone expiry, "
+                    "tie-retains-incumbent (see nqresearch/rolls.py; "
+                    "PROPOSED pending review)",
+            "eligibility_note": (
+                "Out-of-range sessions (e.g. the 2026-08-17 partial edge) are "
+                "EXCLUDED from this series; downstream consumers must not "
+                "extend it past the coverage evaluation range."
+            ),
+            "out_of_range_excluded": [
+                r["session_id"] for r in result.get("out_of_range_sessions", [])
+            ],
+            **front,
+            "n_switches": len(front["switches"]),
+            "status": st.PASS,
+        }
+        p = write_artifact(front_payload, out_dir, "mbp1_front_contract_series",
+                           paths.ROOT)
+        statuses["front-series"] = front_payload["status"]
+        print(f"[closeout] front-series: {len(front['switches'])} switches -> {p}",
+              flush=True)
+
+    if part == "closeout-finalize":
+        from nqresearch.qa.closeout import freeze_mbo_blocks, propose_partitions
+
+        out_dir = paths.qa() / "m0_closeout"
+        blocks = freeze_mbo_blocks(paths.qa_m0() / "mbo_deep_audit.json")
+        p = write_artifact(blocks, out_dir, "mbo_blocks_frozen", paths.ROOT)
+        statuses["mbo-blocks"] = blocks["status"]
+        print(f"[closeout] mbo-blocks: {blocks['status']} "
+              f"({blocks['n_sessions_final']} sessions, {blocks['n_blocks']} blocks) "
+              f"-> {p}", flush=True)
+        prop = propose_partitions(blocks)
+        p = write_artifact(prop, out_dir, "partition_proposal", paths.ROOT)
+        statuses["partition-proposal"] = prop["status"]
+        print(f"[closeout] partition-proposal: {prop['status']} -> {p}", flush=True)
 
     overall = st.worst(statuses.values()) if statuses else st.FAIL
     print(f"[m0] overall: {overall} ({statuses})", flush=True)

@@ -25,13 +25,23 @@ src/nqresearch/
                 # vectorized), driven by SessionWindowConfig
   symbols.py    # NQ outright/spread classification; generic product roots;
                 # NQ-research classification over mixed-product files
+  sources.py    # MBP-1 source-provenance selection (registry-driven; QA-sample
+                # vs canonical enumeration; require_provenance gate check)
   filenames.py  # vendor filename date parsing
   flags.py      # DBN flag bits (F_LAST etc.), UNDEF_PRICE sentinel
   dbnio.py      # read-only chunked DBN reading
-  cli.py        # `nqr data audit`, `nqr data storage-gate`
+  cli.py        # `nqr data audit` (parts incl. mbp1-acquisition,
+                # mbp1-overlap-records), `nqr data storage-gate`
+  calendar.py   # CME trading calendar (versioned committed snapshot,
+                # config/data/cme_calendar.yaml; generator in scripts/)
+  rolls.py      # front-contract/roll rule (volume-leading, monotone expiry)
   qa/
     status.py cache.py storage.py manifest.py report.py
     mbp1_audit.py trades_audit.py reconcile.py mbo_inventory.py mbo_audit.py
+    mbp1_acquisition.py  # acquisition validation, record-level overlap
+                         # identity, cohesive acquisition/provenance gate
+    full_history_audit.py  # closeout session-coverage audit (canonical corpus)
+    closeout.py            # calendar-aware MBO block freeze + partition proposal
 tests/unit/     # sessions (incl. DST + config), symbols/products, flags, MBO
                 # blocks, status, filenames, config/paths, cache keys, storage
                 # gate, manifest validation, git-sha, reconcile units

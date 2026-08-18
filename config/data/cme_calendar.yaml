@@ -1,0 +1,45 @@
+meta:
+  source: pandas_market_calendars calendar 'CME Globex Equity'
+  package_version: 5.4.0
+  range_start: '2024-08-01'
+  range_end: '2026-12-31'
+  timezone: America/Chicago
+  n_trading_days: 626
+  content_sha256: 92896b7a87ade27209e477506bb91804a59a6deba5ad1bdb4c6630fca0f70afa
+  note: Snapshot is the runtime source of truth; regeneration is a reviewed configuration
+    change. Validated against observed vendor data (Good Friday short sessions, 2026-07-03
+    12:00 CT close, day-after-Thanksgiving 12:15 CT close).
+trading_day_close_normal_ct: '16:00'
+session_open_ct: '17:00'
+holidays:
+- '2024-12-25'
+- '2025-01-01'
+- '2025-12-25'
+- '2026-01-01'
+- '2026-12-25'
+early_closes:
+  '2024-09-02': '12:00'
+  '2024-11-28': '12:00'
+  '2024-11-29': '12:15'
+  '2024-12-24': '12:15'
+  '2025-01-20': '12:00'
+  '2025-02-17': '12:00'
+  '2025-04-18': 08:15
+  '2025-05-26': '12:00'
+  '2025-06-19': '12:00'
+  '2025-07-03': '12:15'
+  '2025-07-04': '12:00'
+  '2025-09-01': '12:00'
+  '2025-11-27': '12:00'
+  '2025-11-28': '12:15'
+  '2025-12-24': '12:15'
+  '2026-01-19': '12:00'
+  '2026-02-16': '12:00'
+  '2026-04-03': 08:15
+  '2026-05-25': '12:00'
+  '2026-06-19': '12:00'
+  '2026-07-03': '12:00'
+  '2026-09-07': '12:00'
+  '2026-11-26': '12:00'
+  '2026-11-27': '12:15'
+  '2026-12-24': '12:15'
