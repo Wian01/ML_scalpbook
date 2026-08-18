@@ -1023,3 +1023,30 @@ in by the entry that creates the initial commit.
   still PASSes against the live gate.
 - **Tests:** full suite passing (count in the correction-commit report).
 - **Commit:** this synchronization + AL-0029 as one correction commit.
+
+## AL-0030 — Residual wording cleanup (documentation-only)
+
+- **Category:** documentation correction (no semantic changes)
+- **Corrections:** (1) AGENTS.md/CLAUDE.md closing status line now states
+  that no features, labels, sampling, models, experiments, activated holdout
+  partition, protected holdout dataset, or holdout opening exists yet — only
+  the unactivated tentative HOLDOUT proposal. (2) data-spec §5.4: the
+  "selection-bias comparison deferred until the two-year history exists"
+  sentence labeled pre-closeout history; the corpus now exists and the
+  comparison remains pending for Milestone 2+ (§7 item 6). (3)
+  holdout-policy §1: the historical paragraph no longer implies the dates
+  await coverage — coverage is established and a structurally valid proposal
+  exists at the 2026-04-01 boundary, tentative/unactivated pending official
+  document verification and explicit human approval. (4) "MBO blocks final"
+  wording in both guides clarified to "computational closeout inventory
+  (77 sessions / 30 blocks)" with activation state
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING.
+- **Invariants:** documentation-only — no tests/source/config/calendar/
+  artifact/raw-data/partition/holdout changes; no regeneration; canonical
+  spec untouched. Verified post-edit: config hash
+  `95a9dd78ae8beca9f128af2aa49256fdf103d7b300c568331b7eb7af6874163d` and
+  artifact code hash
+  `92ae81c5d85ff82cbf3141e7af3da158b0e803110124d7a780f7c56b9d06f74f`
+  unchanged; `require_provenance()` PASS; partitions unactivated.
+- **Tests:** 218/218 passing.
+- **Commit:** documentation + this entry as one follow-up commit.

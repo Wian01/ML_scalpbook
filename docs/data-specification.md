@@ -312,10 +312,12 @@ across all 85 files):**
   PROVISIONAL_DOCUMENT_VERIFICATION_PENDING). Current state: §6a and
   AL-0028.
 - **Unresolved:** the reason each block was acquired is not documented in the data
-  directories; per canonical §30 this must be supplied by the researcher, and the
-  MBO_LAB selection-bias comparison (volatility/volume/event-day distribution vs the
-  broad population) requires the full broad dataset, so it is deferred until the
-  two-year MBP-1 history exists.
+  directories; per canonical §30 this must be supplied by the researcher.
+  *(Pre-closeout history: the MBO_LAB selection-bias comparison
+  (volatility/volume/event-day distribution vs the broad population) was
+  deferred because the two-year MBP-1 history did not yet exist. The full
+  canonical corpus now exists; the comparison remains pending for
+  Milestone 2+ — §7 item 6.)*
 
 ### 5.5 Storage check (§2.2, §59; Milestone 0 item 16) — current: **WARN** (≥1 TB met)
 

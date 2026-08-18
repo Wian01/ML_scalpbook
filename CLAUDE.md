@@ -153,9 +153,13 @@ answer — including "no robust edge found" — is success. This is not an HFT p
 - **Milestone 0 closeout complete (commit `3c7aee5e`, AL-0028):** effective
   CME calendar integrated (baseline + official overrides); full-history
   coverage 507 PASS / 8 WARN / 0 FAIL of 516 expected sessions; causal
-  front/roll rule defined; MBO blocks final (77 sessions / 30 blocks);
+  front/roll rule defined; MBO computational closeout inventory of 77
+  sessions / 30 blocks (activation state
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING);
   partition proposal structurally valid but **PROPOSED_NOT_ACTIVE,
   PROVISIONAL_DOCUMENT_VERIFICATION_PENDING, activation_ready=false** —
   activation requires document-level CME verification + explicit human
   approval. Current state: `docs/data-specification.md` §6a/§6b.
-- No features, labels, sampling, models, experiments, or holdout definition exist yet.
+- No features, labels, sampling, models, experiments, activated holdout
+  partition, protected holdout dataset, or holdout opening exists yet; only
+  the unactivated tentative HOLDOUT proposal exists (data-spec §6a).

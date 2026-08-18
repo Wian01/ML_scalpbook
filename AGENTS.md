@@ -138,8 +138,9 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   instrument mappings. Results and gate status: `docs/data-specification.md` and
   `<data_root>/qa/m0/`; history: `docs/implementation-audit-log.md`.
   (Superseded by the closeout below: with the effective calendar applied,
-  2026-07-03 is a COMPLETE shortened session — final inventory **77 NQ
-  sessions in 30 blocks**.)
+  2026-07-03 is a COMPLETE shortened session — computational closeout
+  inventory **77 NQ sessions in 30 blocks**, activation state
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING.)
 - Data lives on the dedicated D: volume (`data_root: D:/nq-research/data`).
   **The two-year MBP-1 purchase is complete (2026-08-18):** two exactly
   adjacent annual jobs (`GLBX-20260817-P3KX4KXDQF`, `GLBX-20260817-S9GCQWS6L8`)
@@ -153,8 +154,10 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   effective CME calendar integrated (baseline + official overrides,
   config/data/cme_calendar*.yaml); full-history coverage audited (516
   expected sessions: 507 PASS / 8 WARN / 0 FAIL, zero unexpected missing);
-  strictly causal front/roll rule defined (8 quarterly switches); MBO blocks
-  final: **77 sessions / 30 blocks**; partition proposal structurally valid
+  strictly causal front/roll rule defined (8 quarterly switches); MBO
+  computational closeout inventory **77 sessions / 30 blocks** (activation
+  state PROVISIONAL_DOCUMENT_VERIFICATION_PENDING); partition proposal
+  structurally valid
   (DEV 318/23/8, SELECTION 100/23/11, HOLDOUT 98/31/11, SPANNING 0) but
   **PROPOSED_NOT_ACTIVE, PROVISIONAL_DOCUMENT_VERIFICATION_PENDING,
   activation_ready=false**. Current state: data-spec §6a/§6b + AL-0028.
@@ -163,4 +166,6 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   crossed-book burst 2026-08-10 11:31:58 CT pending session-phase/`status`
   classification (Milestone 2); remaining canonical §12 QA fields as a
   mandatory Milestone 2 gate; MBO acquisition reasons UNKNOWN_NOT_RECORDED.
-- No features, labels, sampling, models, experiments, or holdout definition exist yet.
+- No features, labels, sampling, models, experiments, activated holdout
+  partition, protected holdout dataset, or holdout opening exists yet; only
+  the unactivated tentative HOLDOUT proposal exists (data-spec §6a).

@@ -8,9 +8,14 @@ Derived from [canonical-spec-v1.0.md](canonical-spec-v1.0.md) §5.3, §6.3, §7,
 HOLDOUT is the final untouched chronological period of historical data, tentatively
 ~4–5 months. Exact dates are fixed during Milestone 0 based only on data coverage, MBO
 session availability, and desired development/selection length — **never on model
-outcomes**. A boundary near `2026-04-01` was discussed during planning but is NOT final
-until Milestone 0 establishes exact broad-data coverage. Any MBO session falling inside
-HOLDOUT is itself HOLDOUT and is excluded from all MBO discovery and ladder development.
+outcomes**. A boundary near `2026-04-01` was discussed during planning; Milestone 0
+has since established exact broad-data coverage (516 expected sessions,
+2024-08-19 → 2026-08-14) and produced a structurally valid HOLDOUT proposal at
+exactly that boundary (2026-04-01 → 2026-08-14) — the proposal remains
+tentative and unactivated pending official-CME document verification and
+explicit human approval (see the Status paragraph below). Any MBO session
+falling inside HOLDOUT is itself HOLDOUT and is excluded from all MBO
+discovery and ladder development.
 
 **Status: a structurally valid HOLDOUT proposal now exists but is NOT
 active.** The Milestone 0 closeout (data-spec §6a/§6b, audit-log AL-0028)
