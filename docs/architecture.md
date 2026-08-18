@@ -37,9 +37,10 @@ tests/unit/     # sessions (incl. DST + config), symbols/products, flags, MBO
                 # gate, manifest validation, git-sha, reconcile units
 ```
 
-Audit caches (`data/qa/m0/cache/`) key on: source path relative to the data
-root, vendor manifest SHA-256 plus size/mtime, a hash of the package source
-tree, and the audit parameters — never filename+size alone.
+Audit caches (`<data_root>/qa/m0/cache/`) key on: source path relative to the
+data root, vendor manifest SHA-256 plus size/mtime, a hash of the package
+source tree, the effective configuration hash, and the audit parameters —
+never filename+size alone.
 
 ## 2. Stack (§46)
 
@@ -51,13 +52,43 @@ MLflow/MCP/distributed compute in V1 (§57, §73).
 ## 3. Data directories and immutability (§11)
 
 The data tree root is **configurable** (`config/data/paths.yaml` `data_root`,
-overridden by `NQR_DATA_ROOT`) so it can live on a dedicated NVMe volume; the
-storage gate (`nqr data storage-gate`) measures free space on that volume.
+overridden by `NQR_DATA_ROOT`) and lives on a dedicated NVMe volume —
+**currently `D:/nq-research/data`** (migrated 2026-08-17, audit-log AL-0019).
+The storage gate (`nqr data storage-gate`) measures free space on that volume.
 
 ```text
 <data_root>/raw/{trades,mbp1,mbo}   # immutable vendor data, read-only, never in Git
 <data_root>/normalized/  qa/  samples/  features/  labels/  datasets/  holdout/
 ```
+
+### 3a. Physical storage policy (C: repo vs D: data volume)
+
+Stored on the **D: data volume under `<data_root>`** — everything large or
+regenerable: raw vendor data; normalized data; QA artifacts and audit caches;
+samples; features; labels; datasets and holdout data; large model binaries;
+predictions; SHAP/interpretation caches; temporary processing files; and other
+large or regeneratable experiment artifacts. Components not yet implemented
+(normalized/samples/features/labels/datasets/holdout, model stores,
+prediction/SHAP outputs) follow this policy when they are built — the policy
+is documented now; the modules are not built prematurely.
+
+Kept in the **Git repository on C:** — source code; configuration; tests;
+documentation; protocol amendments; and lightweight experiment definitions,
+registry records, metrics, audit metadata, and compact final reports
+(`experiments/EXP-nnnn/` per canonical §38, with its large
+predictions/plots artifacts redirected to the data volume when Milestone 1+
+implements the registry).
+
+The root-anchored `/data/` rule in `.gitignore` is retained permanently even
+though the active tree is on D: — it is a safety measure so a repo-local
+`data/` directory (e.g. a stray copy) can never be committed.
+
+**Mapping note vs the frozen spec:** canonical §45 draws `data/` inside the
+repository layout and §7 writes `data/holdout/`. The frozen spec is unchanged;
+this section records the operational mapping of that logical tree onto the
+configured `<data_root>` volume (consistent with §59's NVMe-first processing
+model). Logical structure, immutability, and QA rules are identical; only the
+physical location is remapped via committed configuration.
 
 Raw data is never edited, normalized in place, deleted, rewritten, or silently
 repaired. Every derived artifact is reproducible from raw input + code version +
@@ -78,7 +109,7 @@ research use; exclusions carry machine-readable reason codes from the allowed li
 never applied. Cross-source reconciliation (trades vs MBP-1-derived trades) stops the
 pipeline above tolerance (§13). Missing data is never silently forward-filled across
 contract switches, sessions, or long gaps (§51). Milestone 0 artifacts live in
-`data/qa/m0/` (see [data-specification.md](data-specification.md)).
+`<data_root>/qa/m0/` (see [data-specification.md](data-specification.md)).
 
 ## 6. Feature/label registries (§48, §49)
 

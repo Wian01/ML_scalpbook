@@ -40,10 +40,29 @@ class TestDataRoot:
         assert paths.data_root() == Path("E:/override")
         assert paths.raw_mbp1() == Path("E:/override/raw/mbp1")
 
-    def test_paths_module_default_under_repo(self, monkeypatch):
+    def test_paths_module_follows_configured_yaml(self, monkeypatch):
+        # Without an env override, paths must resolve exactly what
+        # config/data/paths.yaml configures (currently the D: volume).
         monkeypatch.delenv("NQR_DATA_ROOT", raising=False)
         clear_config_cache()
-        assert paths.data_root() == paths.ROOT / "data"
+        from nqresearch.config import load_data_paths_config
+
+        expected = load_data_paths_config().resolved_data_root(paths.ROOT)
+        assert paths.data_root() == expected
+        assert paths.raw_mbp1() == expected / "raw" / "mbp1"
+
+    def test_configured_root_is_the_dedicated_volume(self, monkeypatch):
+        # Guards the migration decision: the committed configuration points at
+        # the dedicated D: data volume, not the repo-relative directory.
+        from pathlib import Path
+
+        from nqresearch.config import load_data_paths_config
+
+        monkeypatch.delenv("NQR_DATA_ROOT", raising=False)
+        clear_config_cache()
+        root = load_data_paths_config().resolved_data_root(paths.ROOT)
+        assert root.is_absolute()
+        assert root == Path("D:/nq-research/data")
 
 
 class TestSessionWindowConfig:

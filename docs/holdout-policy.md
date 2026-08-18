@@ -25,8 +25,11 @@ definition; candidate rescue. Only a frozen evaluation plan may access it.
 
 Protection must be mechanical, not merely documented:
 
-- `data/holdout/` protected by filesystem permissions; the normal development user has
-  no direct read permission;
+- `<data_root>/holdout/` protected by filesystem permissions; the normal development
+  user has no direct read permission (canonical §7 writes `data/holdout/`; the
+  physical location follows the configured data root — currently
+  `D:/nq-research/data/holdout/` — per the operational mapping in
+  [architecture.md](architecture.md) §3a);
 - the data loader refuses HOLDOUT date ranges by default; an explicit override flag is
   required and every override writes an immutable audit entry;
 - Claude Code permissions/hooks deny HOLDOUT paths;

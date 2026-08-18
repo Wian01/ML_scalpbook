@@ -33,7 +33,8 @@ answer — including "no robust edge found" — is success. This is not an HFT p
    when explicitly specified and cannot alter chronological evaluation.
 4. Never access HOLDOUT without the explicit authorized workflow.
 5. Raw data is immutable — never edit, rename, move, re-compress, "repair", or delete
-   anything under `data/raw/`. Read-only access only.
+   anything under `<data_root>/raw/` (canonical wording: `data/raw/`; the data root
+   is configured, currently `D:/nq-research/data`). Read-only access only.
 6. Never silently alter labels/evaluation to improve results.
 7. Never weaken/change a test solely to make implementation pass; legitimate test changes
    must document the changed requirement.
@@ -98,7 +99,17 @@ answer — including "no robust edge found" — is success. This is not an HFT p
 
 ## Data handling
 
-- All of `data/` is gitignored. Raw vendor data (`data/raw/`) is immutable and read-only.
+- The data tree lives OUTSIDE the repository on the dedicated data volume:
+  `config/data/paths.yaml` `data_root` (overridable via `NQR_DATA_ROOT`),
+  **currently `D:/nq-research/data`**. Raw vendor data (`<data_root>/raw/`) is
+  immutable and read-only. The root-anchored `/data/` gitignore rule stays as a
+  safety net against ever committing licensed data from a repo-local tree.
+- Physical storage policy: everything large or regenerable (raw, normalized, QA
+  artifacts + audit caches, samples, features, labels, datasets, holdout, model
+  binaries, predictions, SHAP/interpretation caches, temp processing files) lives
+  under `<data_root>` on D:; the Git repo on C: keeps only code, config, tests,
+  docs, protocol amendments, and lightweight experiment definitions/registry
+  records/metrics/audit metadata/compact reports (details: `docs/architecture.md`).
 - Every derived artifact must be reproducible from raw + code version + config + lock file.
 - No dataset may be used for research without a persistent QA artifact (PASS/WARN/FAIL);
   exclusions require machine-readable reason codes (allowed/forbidden list: canonical §50).
@@ -124,10 +135,9 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   MBO downloads were recovered and re-validated). One MBO job also contains expected
   ES.FUT data, excluded from NQ research via instrument mappings. Authoritative NQ
   MBO session/block counts, results, and gate status: `docs/data-specification.md`
-  and `data/qa/m0/`.
-  **MBP-1 purchase gate: WARN — data quality PASS, but storage (263.2 GB free < 1 TB
-  required) blocks the full purchase.** The data root is configurable
-  (`config/data/paths.yaml` / `NQR_DATA_ROOT`); re-check with `nqr data storage-gate`
-  after the new M.2 is installed. Partition dates and MBO block IDs are not yet
+  and `<data_root>/qa/m0/`.
+  Data migrated to the dedicated D: volume (`data_root: D:/nq-research/data`,
+  config/data/paths.yaml) on 2026-08-17; storage gate re-run there — see
+  `docs/data-specification.md` §5.5/§6 for the current purchase-gate verdict. Partition dates and MBO block IDs are not yet
   frozen (pending full history + holiday calendar).
 - No features, labels, sampling, models, experiments, or holdout definition exist yet.

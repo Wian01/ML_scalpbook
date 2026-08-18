@@ -2,7 +2,7 @@
 
 Derived from [canonical-spec-v1.0.md](canonical-spec-v1.0.md) §2, §8–§13, §50–§52, §74
 (authoritative) plus **observed Milestone 0 facts** from the local audit
-(machine-readable artifacts: `data/qa/m0/*.json`).
+(machine-readable artifacts: `<data_root>/qa/m0/*.json`).
 
 ## 1. Data assets (observed inventory, 2026-08-17)
 
@@ -18,17 +18,18 @@ children of the queried parents: outright futures and calendar spreads**.
 `pretty_px=false` (int64 1e-9 prices), `split_duration=day` (UTC-day file splits).
 
 The data tree root is configurable: `config/data/paths.yaml` (`data_root`),
-overridden by the `NQR_DATA_ROOT` environment variable, so raw/derived data can
-live on a dedicated NVMe volume (the planned M.2). All paths below are relative
-to that root. The free-space purchase gate is repeatable via
-`nqr data storage-gate` and re-measures whatever volume the configured data
-root resides on.
+overridden by the `NQR_DATA_ROOT` environment variable. **Since 2026-08-17 the
+canonical active data root is `D:/nq-research/data`** on the dedicated D: NVMe
+volume (migration validated file-for-file and by full manifest SHA-256
+re-verification; audit-log AL-0019). All paths below are relative to that
+root. The free-space purchase gate is repeatable via `nqr data storage-gate`
+and re-measures whatever volume the configured data root resides on.
 
 | Dataset | Location (immutable) | Coverage (UTC file dates) | Files | Compressed |
 |---|---|---|---|---|
-| Trades (2 jobs) | `data/raw/trades/NQ_20240809-20250809`, `NQ_20250809-20260809` | 2024-08-09 → 2026-08-07 | 624 | ~3.03 GB |
-| MBP-1 sample (1 job) | `data/raw/mbp1/2026-08-03_2026-08-15/GLBX-20260817-N8HD86YKNS` | 2026-08-03 → 2026-08-14 | 11 | ~2.26 GB |
-| MBO (31 jobs) | `data/raw/mbo/GLBX-*` | 80 scattered sessions, 2025-08-18 → 2026-08-07 | 80 | ~31.9 GB |
+| Trades (2 jobs) | `<data_root>/raw/trades/NQ_20240809-20250809`, `NQ_20250809-20260809` | 2024-08-09 → 2026-08-07 | 624 | ~3.03 GB |
+| MBP-1 sample (1 job) | `<data_root>/raw/mbp1/2026-08-03_2026-08-15/GLBX-20260817-N8HD86YKNS` | 2026-08-03 → 2026-08-14 | 11 | ~2.26 GB |
+| MBO (31 jobs) | `<data_root>/raw/mbo/GLBX-*` | 85 files (post re-download), 2025-08-18 → 2026-08-07 | 85 | ~36.2 GB |
 
 Every job directory carries vendor `metadata.json`, `condition.json` (all MBP-1
 sample days: "available"), and `manifest.json` (SHA-256 per file). **Manifest
@@ -104,7 +105,7 @@ features/labels never cross an instrument switch (§8).
 
 ## 5. Milestone 0 audit results (observed)
 
-> Artifacts: `data/qa/m0/mbp1_sample_audit.json`, `trades_audit.json`,
+> Artifacts: `<data_root>/qa/m0/mbp1_sample_audit.json`, `trades_audit.json`,
 > `mbo_inventory.json`, `mbp1_trades_reconciliation.json`. Summarized below.
 
 ### 5.1 MBP-1 two-week sample — status **WARN** (all findings understood or benign)
@@ -256,26 +257,29 @@ across all 85 files):**
   broad population) requires the full broad dataset, so it is deferred until the
   two-year MBP-1 history exists.
 
-### 5.5 Storage check (§2.2, §59; Milestone 0 item 16) — **FAIL**
+### 5.5 Storage check (§2.2, §59; Milestone 0 item 16) — **PASS** (on D:)
 
 - Repeatable gate: `nqr data storage-gate` measures the volume holding the
-  configured data root (artifact `storage_gate.json`). Latest run
-  (2026-08-17, after the MBO re-download): **263.2 GB free — FAIL** (< 1000 GB
-  required; 2000 GB preferred). Re-run after pointing `data_root`/
-  `NQR_DATA_ROOT` at the new M.2.
+  configured data root (artifact `storage_gate.json`). After migration to
+  `D:/nq-research/data` (2026-08-17): **2,005.5 GB free — PASS** (≥ 1000 GB
+  required minimum AND ≥ 2000 GB preferred headroom, the latter narrowly).
+  History: earlier runs against the C: volume measured 263.2–284.6 GB free
+  (FAIL) and correctly blocked the purchase until the D: volume existed.
 - Two-year MBP-1 extrapolation from the sample (August weekday mean ≈ 243 MB
   compressed / 922 MB decoded DBN × 504 trading days): **≈122 GB compressed,
   ≈465 GB decoded** — consistent with the spec's ~361 GB raw planning figure,
   with wide seasonal uncertainty (August is a low-activity month).
 - Canonical requirement before the full purchase: **≥1 TB free NVMe (2 TB
   preferred)** to hold raw MBP-1 + normalized Parquet + QA + features + existing
-  MBO (~36 GB after the re-download) + experiment artifacts. The current
-  263.2 GB free fails this requirement and would not even hold the decoded raw
-  data plus derived artifacts comfortably.
+  MBO (~36 GB after the re-download) + experiment artifacts. The D: data volume
+  meets both thresholds.
 
 ## 6. Purchase gate for full two-year MBP-1 (§2.2, Milestone 0 item 14)
 
-**Gate verdict: WARN — do not purchase yet.**
+**Gate verdict: PASS — the purchase is unblocked** (as of the 2026-08-17
+migration to the D: data volume). Remaining WARNs are documented
+qualifications, not blockers. The two-year history is intentionally NOT yet
+purchased; nothing in the audit treats its absence as missing data.
 
 | Component | Status | Basis |
 |---|---|---|
@@ -283,16 +287,18 @@ across all 85 files):**
 | Cross-source trade reconciliation | **PASS (exact)** | §5.3 |
 | Side/aggressor usability | **PASS** | §5.1, §5.2 — unsigned ≈0.0005% |
 | Vendor manifest integrity (sizes + SHA-256) | **PASS** | manifest_validation.json — 34/34 job dirs, 788/788 files verified; zero failures/missing/unmanifested (after MBO re-download recovery, audit-log AL-0013) |
-| Storage precondition (≥1 TB free NVMe) | **FAIL** | §5.5 — 263.2 GB free |
+| Storage precondition (≥1 TB free NVMe) | **PASS** | §5.5 — 2,005.5 GB free on the D: data volume (also meets the 2 TB preferred headroom) |
 | Sample representativeness | **WARN** | two August weeks; low-vol season; one Monday contains an unexplained mid-RTH crossed-book burst pending status-data classification |
 
-The data itself supports proceeding; the blocking item is storage. Recommended
-sequence: add ≥1 TB (preferably 2 TB) NVMe capacity → re-run the storage check →
-purchase the two-year MBP-1 history.
+All gate components now PASS (with documented WARN qualifications). The
+purchase of the two-year MBP-1 history may proceed when the researcher decides;
+per §59, monitor free space during the download and re-run
+`nqr data storage-gate` before each large tranche.
 
 ## 7. Unresolved assumptions and open items
 
-1. **Storage** — must be expanded before the full MBP-1 purchase (§5.5).
+1. *(Resolved 2026-08-17.)* **Storage** — the D: data volume passes the gate
+   (§5.5); re-run `nqr data storage-gate` before each large download tranche.
 2. **CME holiday calendar** — not yet machine-integrated. Affects: trades-coverage
    WARN (Good Friday), MBO block contiguity (blocks may be over-split at
    holidays), and future session-completeness QA. Required before MBO block IDs

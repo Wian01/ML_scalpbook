@@ -368,3 +368,81 @@ in by the entry that creates the initial commit.
   amended.
 - **Commit:** this entry is included in the second commit (SHA recorded in
   the commit itself; the next log entry to touch this file should cite it).
+
+## AL-0019 — Data-root migration to the dedicated D: volume
+
+- **Category:** protocol-relevant decision + implementation + artifact regeneration
+- **Actor:** Claude (Claude Code), migration copy performed by the user;
+  prior commits AL-0018 = `d4b3fe3`, initial = `88af53d`
+- **What:** `D:\nq-research\data` (2 TB NVMe) made the canonical active data
+  root. The C: tree (`C:\Users\Wian\projects\trading\ML_scalpbook\data`)
+  remains untouched as the protected source pending independently reviewed
+  deletion approval. No raw file on either volume was modified, renamed,
+  moved, or deleted.
+- **Pre-change verification:** full metadata comparison of both trees —
+  **1,564 files and 42,662,762,806 bytes on each side; zero C-only, zero
+  D-only, zero size mismatches**. `NQR_DATA_ROOT` confirmed unset in Process,
+  User, and Machine scopes (no silent override).
+- **Independent D: content validation:** manifest validation re-run against
+  D: — **34/34 job directories, 788/788 files, exact sizes, exact SHA-256,
+  zero missing / failed / unmanifested DBN files.**
+- **Changes:** `config/data/paths.yaml` `data_root: D:/nq-research/data`;
+  current-guidance docs updated to `<data_root>/...` with the D: root named
+  where operational (CLAUDE.md incl. rule-5 mapping note, AGENTS.md,
+  architecture.md incl. new §3a physical storage policy, data-specification.md,
+  holdout-policy.md). Canonical spec untouched (verified unmodified in git;
+  file present in the initial commit). Root-anchored `/data/` gitignore rule
+  retained deliberately as a permanent safety net. Physical storage policy
+  documented: large/regenerable artifacts (raw, normalized, QA + caches,
+  samples, features, labels, datasets, holdout, model binaries, predictions,
+  SHAP caches, temp files) on D: under `<data_root>`; code/config/tests/docs/
+  protocol amendments/lightweight experiment metadata in the C: Git repo.
+  Mapping-vs-spec note recorded in architecture §3a (canonical §45/§7 draw
+  `data/` inside the repo; operational mapping only, spec unchanged). Tests:
+  `test_config_paths.py` updated — repo-relative-default assumption replaced
+  with configured-yaml assertions plus a guard that the committed root is
+  `D:/nq-research/data`; suite now **136 passing**.
+- **Full audit regeneration against D::** the data-root change altered the
+  effective config hash (now
+  `f27de73d2e23f3aaf6ead90721d17688c58c632d3f7620ff84b39cc9cec6ad96`),
+  correctly invalidating every decode cache; all parts recomputed from the D:
+  raw tree (protection not bypassed). All seven envelopes verified:
+  `data_root = D:\nq-research\data`, one config hash (above), one
+  `audit_code_hash`
+  `b4d7a27aabcaa4e3c7ad3bdf71f52cea27cb417bcd5f57867f457a6ef53caa40`
+  (unchanged — no package code changed), `git_sha = d4b3fe3...` (HEAD at
+  generation; note the migration's config/doc changes were intentionally not
+  yet committed, so a post-commit re-stamp run will be needed if the reviewer
+  wants the migration commit's SHA inside the envelopes).
+- **Results (identical to pre-migration where expected):**
+  - `storage_gate` **PASS** — 2,005.5 GB free on D: (≥1,000 GB required AND
+    ≥2,000 GB preferred, the latter narrowly). C: history (263.2–284.6 GB,
+    FAIL) preserved in AL-0016/AL-0018.
+  - `manifest_validation` PASS (34/788/0/0/0);
+  - `mbp1_sample_audit` WARN, `trades_audit` WARN (unchanged findings);
+  - `mbp1_trades_reconciliation` **PASS exact** — 5/5 UTC days PASS,
+    session-level PASS, 19 pairs;
+  - `mbo_inventory` WARN (provisional by design);
+  - `mbo_deep_audit` WARN — **identical NQ results: 76 full-RTH sessions,
+    1 partial, 106 initialization-artifact dates, 31 provisional blocks,
+    2,005,045,979 rows, ES exclusions 56,819,215, NQ-spread exclusions
+    4,952,807** — bitwise-equal aggregates across volumes confirm decode
+    determinism and copy integrity.
+  - **MBP-1 purchase gate: PASS — purchase unblocked.** The two-year history
+    remains intentionally unpurchased; the audit treats only present data and
+    nothing classifies its absence as missing (verified: coverage checks span
+    observed ranges only).
+- **Artifact SHA-256 (D: generation):**
+  - `storage_gate.json` `c7bb5520b4484e31467686d0ac0c5f20fba20aeacaeda1befa6584e793bb722f`
+  - `manifest_validation.json` `17d3692e7ca64ac0f1def92b9c079ab3bc7bdc341082dacdabc44e034d0eac3a`
+  - `mbp1_sample_audit.json` `91ae06677719766c99f8ad05d10db8e0d0269c26f4a0ea4c5ad34a8965d4ff6c`
+  - `trades_audit.json` `e77053a74152a9adaec87d1067bcb008c77af7fef3ec90bca098ebb7078f018e`
+  - `mbp1_trades_reconciliation.json` `d5510d40fb06c04ed0681dd2043954ea16c5eb5c9f0c3bfcb983d4a3443c9936`
+  - `mbo_inventory.json` `6c45bb484e791e2bdb2408209fc064fc6951c046f3b2b805e62c88147f6c5e14`
+  - `mbo_deep_audit.json` `9738e04f470b40ce599da59f6b75c51fa57f18322043ad41a4394f8db05c5fdf`
+- **Unresolved risks:** C: source tree deletion awaits independent review and
+  explicit user action (assistants never delete it); envelope `git_sha`
+  predates the migration commit (re-stamp optional post-commit); CME holiday
+  calendar, crossed-burst classification, front/roll rule, MBO acquisition
+  reasons, partition/holdout freezing — all unchanged from AL-0016.
+- **Commit:** pending (migration changes not yet committed by instruction).
