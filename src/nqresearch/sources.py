@@ -68,15 +68,23 @@ def file_date_key_safe(filename: str) -> str | None:
         return None
 
 
-def research_input_entries(
+def _canonical_corpus_entries(
     registry: Mbp1SourceRegistry | None = None, data_root: Path | None = None
 ) -> dict[str, tuple[Path, str]]:
-    """Logical daily partition (YYYYMMDD) -> (DBN file, owning request_id).
+    """PRIVATE canonical-corpus enumeration (QA-only via nqresearch.qa_corpus).
 
-    Enumerates research-eligible sources only, with explicit ownership
-    tracking. A partition appearing in more than one research-eligible source
-    raises ResearchOverlapError — an unexpected overlap must never be
-    silently resolved.
+    Logical daily partition (YYYYMMDD) -> (DBN file, owning request_id) over
+    research-eligible sources, with explicit ownership tracking. A partition
+    appearing in more than one research-eligible source raises
+    ResearchOverlapError — an unexpected overlap must never be silently
+    resolved.
+
+    THERE IS NO PUBLIC RESEARCH ENUMERATION HERE: the former
+    research_input_entries/research_input_files interfaces were removed
+    (independent-audit remediation) because they mechanically bypassed the
+    holdout fence. Ordinary research loading goes through
+    nqresearch.research, which is fenced, provenance-checked, and — until
+    the Milestone 2 session-filtered reader exists — refuses entirely.
     """
     reg = registry if registry is not None else load_mbp1_sources()
     eligible = reg.research_sources()
@@ -97,13 +105,6 @@ def research_input_entries(
     return out
 
 
-def research_input_files(
-    registry: Mbp1SourceRegistry | None = None, data_root: Path | None = None
-) -> dict[str, Path]:
-    """Map of logical daily partition (YYYYMMDD) -> DBN file for research input."""
-    return {
-        k: path for k, (path, _) in research_input_entries(registry, data_root).items()
-    }
 
 
 class ProvenanceError(RuntimeError):

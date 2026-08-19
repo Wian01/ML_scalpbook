@@ -107,14 +107,22 @@ def run_cached(
                 continue
         todo.append(f)
 
+    if cache_dir is not None:
+        from nqresearch.rawguard import assert_write_outside_raw
+
+        assert_write_outside_raw(cache_dir)
+
     def _store(f: Path, result: dict) -> None:
         reports[f.name] = result
         if cache_dir is not None:
-            cache_dir.mkdir(parents=True, exist_ok=True)
+            from nqresearch.rawguard import assert_write_outside_raw
+
+            # Validate the completed final path and write to the resolved
+            # result (a path-bearing source filename must not escape).
+            final = assert_write_outside_raw(cache_dir / f"{f.name}.json")
+            final.parent.mkdir(parents=True, exist_ok=True)
             entry = {"_cache_key": cache_key(f, params), "result": result}
-            (cache_dir / f"{f.name}.json").write_text(
-                json.dumps(entry, default=str), encoding="utf-8"
-            )
+            final.write_text(json.dumps(entry, default=str), encoding="utf-8")
 
     if todo and workers > 1 and len(todo) > 1:
         with ProcessPoolExecutor(max_workers=min(workers, len(todo))) as pool:

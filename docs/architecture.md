@@ -35,6 +35,13 @@ src/nqresearch/
   calendar.py   # CME trading calendar (versioned committed snapshot,
                 # config/data/cme_calendar.yaml; generator in scripts/)
   rolls.py      # front-contract/roll rule (volume-leading, monotone expiry)
+  holdout.py    # fail-closed mechanical holdout fence (PENDING_INDEPENDENT_AUDIT)
+  research.py   # THE research-loading API: mandatory date range + fence first
+  qa_corpus.py  # explicitly QA-ONLY full-corpus enumeration (never research)
+  rawguard.py   # raw-tree write refusal (path/alias/case/drive-relative resistant)
+  experiments/  # models.py (§37 prereg + lifecycle states), registry.py
+                # (DuckDB registry; hash-chained append-only audit; crash-safe
+                # registration; immutable specs fail closed; §47 capture)
   qa/
     status.py cache.py storage.py manifest.py report.py
     mbp1_audit.py trades_audit.py reconcile.py mbo_inventory.py mbo_audit.py
@@ -51,6 +58,14 @@ Audit caches (`<data_root>/qa/m0/cache/`) key on: source path relative to the
 data root, vendor manifest SHA-256 plus size/mtime, a hash of the package
 source tree, the effective configuration hash, and the audit parameters —
 never filename+size alone.
+
+**QA-vs-research loading:** QA/audit operations (acquisition validation,
+coverage audits) enumerate the full canonical corpus through the explicitly
+named QA-only API (`nqresearch.qa_corpus`); ordinary research/normalization
+input MUST use `nqresearch.research` (explicit date range, mechanical holdout
+fence invoked before enumeration, fail-closed while no active partition
+configuration exists). An executable call-site allowlist test enforces that
+no non-QA module touches the corpus enumerators.
 
 ## 2. Stack (§46)
 
@@ -136,9 +151,19 @@ Planned per canonical §58: `nqr data normalize`, `nqr samples build`, `nqr labe
 
 ## 8. Milestones (§60–§72)
 
-0. **Data audit** (in progress) — coverage, schema/semantics, session lists, block IDs,
-   candidate partitions, one-week+ MBP-1 sample PASS before full purchase, storage check.
-1. Foundation — configs, DuckDB registry, holdout fence, audit logging, base tests.
+0. **Data audit — COMPLETE** (closeout commit `3c7aee5e`, audit-log
+   AL-0028): full-history coverage, provisional effective calendar, MBO
+   blocks, causal roll rule, partition proposal (PROPOSED_NOT_ACTIVE;
+   activation gated on document verification + human approval).
+1. **Foundation — implemented, `PENDING_INDEPENDENT_AUDIT`**: DuckDB
+   experiment registry with immutable §37 lifecycle (`nqr exp
+   register/show/list/transition`; per-experiment committed record dirs;
+   append-only lifecycle audit; §47 reproducibility capture); fail-closed
+   mechanical holdout fence (`nqresearch/holdout.py` — no active partitions
+   ⇒ all research range requests refused; no override path exists);
+   raw-write guard (`nqresearch/rawguard.py`, enforced in artifact/cache
+   writers). The holdout fence is builder work only and must pass a
+   fresh-session adversarial audit before Milestone 1 is certified.
 2. MBP-1 base dataset (one month first, then two years); 2b MBO reconstruction
    validation (vendor MBP-10 sample required).
 3. Sample + label engine (volume clock, time clock, volatility, latency-aware labels).

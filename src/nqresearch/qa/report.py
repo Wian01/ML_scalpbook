@@ -31,7 +31,12 @@ def _git_sha(root: Path) -> str | None:
 
 
 def write_artifact(payload: dict, out_dir: Path, name: str, root: Path) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
+    from nqresearch.rawguard import assert_write_outside_raw
+
+    # Validate the COMPLETED final path (a path-containing artifact name must
+    # not escape the checked directory) and write to the resolved result.
+    final = assert_write_outside_raw(Path(out_dir) / f"{name}.json")
+    final.parent.mkdir(parents=True, exist_ok=True)
     from nqresearch import paths
     from nqresearch.config import effective_config_hash
     from nqresearch.qa.cache import package_source_hash
@@ -45,6 +50,5 @@ def write_artifact(payload: dict, out_dir: Path, name: str, root: Path) -> Path:
         "data_root": str(paths.data_root()),
         **payload,
     }
-    path = out_dir / f"{name}.json"
-    path.write_text(json.dumps(envelope, indent=2, default=str), encoding="utf-8")
-    return path
+    final.write_text(json.dumps(envelope, indent=2, default=str), encoding="utf-8")
+    return final

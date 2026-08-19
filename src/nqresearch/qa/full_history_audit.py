@@ -450,11 +450,14 @@ def aggregate(file_reports: list[dict]) -> dict:
 def run_coverage(data_root: Path, chunk_rows: int = dbnio.DEFAULT_CHUNK_ROWS,
                  workers: int = 3, cache_dir: Path | None = None) -> dict:
     from nqresearch.qa.cache import run_cached
-    from nqresearch.sources import require_provenance, research_input_entries
+    from nqresearch.qa_corpus import qa_corpus_entries
+    from nqresearch.sources import require_provenance
 
     _disk_guard(data_root)
     require_provenance(data_root)  # refuse without valid provenance evidence
-    entries = research_input_entries(data_root=data_root)
+    # QA-only full-corpus enumeration: this is a coverage AUDIT, not research
+    # dataset construction (see nqresearch.research for the fenced API).
+    entries = qa_corpus_entries(data_root=data_root)
     files = [p for _, (p, _) in sorted(entries.items())]
     reports = run_cached(
         files, audit_file, (chunk_rows,), workers, cache_dir,

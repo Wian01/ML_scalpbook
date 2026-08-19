@@ -441,7 +441,9 @@ def source_selection_result(
 ) -> dict:
     """Materialize the canonical research input set via the selection layer,
     with ownership tracking and a resolved-path leak check for the QA sample."""
-    entries = src_mod.research_input_entries(registry, data_root)
+    from nqresearch.qa_corpus import qa_corpus_entries
+
+    entries = qa_corpus_entries(registry, data_root)
     keys = sorted(entries)
     sample = src_mod.qa_sample_source(registry)
     sample_dir = src_mod.source_dir(sample, data_root).resolve()

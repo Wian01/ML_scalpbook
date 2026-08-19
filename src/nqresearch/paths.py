@@ -53,3 +53,22 @@ def qa() -> Path:
 
 def qa_m0() -> Path:
     return qa() / "m0"
+
+
+def registry_db() -> Path:
+    """DuckDB experiment-registry database (queryable transactional store; the
+    per-experiment directories under experiments_dir() are the committed
+    lightweight records)."""
+    import os
+
+    override = os.environ.get("NQR_REGISTRY_DB")
+    return Path(override) if override else data_root() / "registry" / "experiments.duckdb"
+
+
+def experiments_dir() -> Path:
+    """Per-experiment lightweight record directories (canonical §38), kept in
+    the Git repository (large outputs are gitignored/redirected)."""
+    import os
+
+    override = os.environ.get("NQR_EXPERIMENTS_DIR")
+    return Path(override) if override else ROOT / "experiments"

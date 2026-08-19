@@ -1050,3 +1050,320 @@ in by the entry that creates the initial commit.
   unchanged; `require_provenance()` PASS; partitions unactivated.
 - **Tests:** 218/218 passing.
 - **Commit:** documentation + this entry as one follow-up commit.
+
+## AL-0031 — Milestone 1 Foundation implemented (builder work; PENDING_INDEPENDENT_AUDIT)
+
+- **Category:** implementation (canonical §61) + protocol-relevant design
+- **Gap analysis** vs §61: repo/uv/layout/Pydantic-configs/docs/protocol
+  files/base tests already existed from Milestone 0 phases (reused, not
+  rebuilt). Genuinely missing and now implemented: DuckDB experiment
+  registry + immutable lifecycle, mechanical holdout fence, enforced
+  raw-write protection, structured experiment lifecycle audit. No frozen
+  protocol value, partition date, label/sample/feature/evaluation/cost
+  semantics changed; configuration identities remain deterministic (config
+  hash verified unchanged: `95a9dd78…6874163d`).
+- **Registry** (`experiments/registry.py`, DuckDB at
+  `<data_root>/registry/experiments.duckdb` + one committed lightweight
+  directory per experiment): deterministic sequential IDs (EXP-0001… = §39
+  trial counter); complete §37 pre-registration model (all fields required,
+  extra fields forbidden); §47 reproducibility snapshot at registration
+  (git SHA, python, platform, uv.lock SHA-256, config hash, code hash,
+  seeds, experiment ID); spec content-hash stored at registration and
+  re-verified on every transition (edited prereg.yaml ⇒ ImmutableSpecError:
+  "a new hypothesis/configuration requires a NEW experiment"); lifecycle
+  PLANNED→RUNNING→{PASSED,FAILED,INCONCLUSIVE,SUSPECT_AUDIT_REQUIRED} with
+  all other transitions refused loudly and terminal states never rewritten;
+  refusals themselves audit-recorded; append-only lifecycle audit in DB and
+  per-experiment audit.json; no delete API (failed/null retained, always
+  listed); no ID reuse/overwrite (existing directory or row refuses);
+  transactional writes; schema_version=1 with unknown-version refusal.
+  CLI: `nqr exp register|show|list|transition`. No real market experiment
+  registered; tests use synthetic metadata only.
+- **Holdout fence** (`holdout.py`; SENSITIVE — builder only,
+  `PENDING_INDEPENDENT_AUDIT`): research range access gated on
+  `config/data/partitions_active.yaml`, which DOES NOT exist — every
+  request currently FAILS CLOSED; the PROPOSED_NOT_ACTIVE proposal is never
+  read/inferred; with an active config, holdout overlap (inclusive
+  boundaries) and any range outside DEV∪SELECTION are refused; activation
+  schema requires activated=true + recorded human approver + chronological
+  ranges (malformed ⇒ fail closed); NO override parameter exists anywhere;
+  `holdout_opening()` always refuses pending the §7 opening workflow.
+  Verified against the live repo: fail-closed today.
+- **Raw-write guard** (`rawguard.py`): `assert_write_outside_raw` resolves
+  the deepest existing ancestor (defeats symlink/junction aliases and `..`)
+  with Windows case-folding, refusing destinations inside `<data_root>/raw`;
+  enforced in `qa.report.write_artifact` and `qa.cache.run_cached`; no CLI
+  command writes into raw. Real raw corpus untouched (no re-hash needed).
+- **Verification:** 267/267 tests (49 new: registry schema/persistence/
+  migration refusal, required fields, duplicate-ID refusal, immutability,
+  full valid/invalid transition matrix, trial counting, failed-run
+  retention, reproducibility identities, holdout fail-closed + boundary +
+  no-override cases, raw path-escape/alias/case cases, CLI refusal paths).
+  Live `require_provenance()` PASS (none of the seven gate-hash modules
+  changed); config hash unchanged; the 12 Milestone 0 artifacts untouched
+  (timestamps verified); raw data untouched.
+- **Status:** Milestone 1 is **PENDING_INDEPENDENT_AUDIT** — not
+  self-certified. Adversarial-audit handoff recorded in the phase report
+  (boundary dates, missing/malformed config, path aliases, direct loader
+  calls, CLI bypasses, override attempts).
+- **Commit:** pending review (proposed plan in the phase report; not executed).
+
+## AL-0032 — Independent Milestone 1 audit: CHANGES_REQUIRED (reproduced bypasses)
+
+- **Category:** audit/review finding (independent adversarial audit of AL-0031)
+- **Verdict:** CHANGES_REQUIRED despite a fully passing test suite. Reproduced
+  proofs: (1) `sources.research_input_files()` returned all 625 canonical
+  files while partitions were inactive — the holdout fence was advisory, not
+  enforced at the research-input layer; the fence also accepted an arbitrary
+  `repo_root`, a production bypass parameter. (2) ExperimentRegistry accepted
+  DB/experiment-dir destinations under a synthetic `raw/` tree (env overrides
+  bypassed the raw guard); `write_artifact` validated only the parent
+  directory, so a path-bearing artifact name could escape. (3) Deleting
+  `prereg.yaml` after registration still allowed `begin_run()` — missing
+  records did not fail closed like altered records. (4) `audit.json` was
+  load-extend-rewrite (not append-only as claimed) and DuckDB rollback cannot
+  undo created directories; `COUNT(*)+1`/`MAX(seq)+1` allocation was not
+  concurrency-safe. (5) §38 source dataset hashes and outputs were missing
+  from pre-registration/storage. (6) Reporting errors: 8+8=16 files (not
+  6+6), and the package source hash had changed
+  (audit-measured `931b160fc08a52a9a46a91f47b55e6aa1f655dbf0b467639b3324b13da43ba1a`)
+  while only the config hash was unchanged.
+- **Commit:** none (working tree only).
+
+## AL-0033 — Milestone 1 remediation of AL-0032 (still PENDING_INDEPENDENT_AUDIT)
+
+- **Category:** implementation fix (builder); every reproduced proof is now an
+  automated regression test.
+- **(1) Fence enforced at the research layer:** new `nqresearch/research.py`
+  is the ONLY research-loading API — explicit mandatory date range,
+  mechanical fence invocation BEFORE any enumeration, fail-closed while
+  `partitions_active.yaml` is absent (live integration test proves the
+  default research API cannot return the 625 files). New
+  `nqresearch/qa_corpus.py` gives QA/audit code explicitly named QA-only
+  full-corpus enumeration; `qa/full_history_audit.py` switched to it; an
+  executable call-site allowlist test fails if any non-QA module references
+  the corpus enumerators. Public fence API no longer accepts any
+  `repo_root`/config parameter (tests inject via private `_load_active_
+  partitions_from`/`_check_range` only). Active-partition schema hardened:
+  `extra=forbid` on every nested model; timezone-aware UTC
+  `approved_at_utc`; durable approval identity (`approved_by` +
+  `approval_reference`); mandatory binding SHAs
+  (`partition_proposal_sha256`, `effective_calendar_sha256`). No active
+  configuration was created. **Deliberate constraint (flagged for
+  re-audit):** `sources.py` and `qa/mbp1_acquisition.py` are two of the
+  seven acquisition-gate-bound modules; renaming
+  `sources.research_input_*` in place would invalidate the Milestone 0
+  provenance binding, so those bytes are UNCHANGED and the in-place rename
+  is deferred to the next legitimate gate re-bind window — interim
+  protection is the fenced research API + executable allowlist.
+- **(2) Raw guard completed:** registry DB, experiment directories, and every
+  record file pass the guard (env overrides included — regression test);
+  `write_artifact` and cache writers validate the COMPLETED final path and
+  write to the guard's resolved result (final-name traversal test); guard
+  handles drive-relative `D:file` via abspath; tests added for prefix
+  collisions (`rawx`), UNC prefix logic, nested junction chains, case
+  aliases.
+- **(3) Immutability fail-closed:** missing `prereg.yaml` refuses exactly
+  like altered records; verification now also runs in `show()` and before
+  execution entry; tests cover missing file, invalid YAML, changed types,
+  extra fields, substituted directories.
+- **(4) Honest audit trail + crash safety:** the hash-chained DuckDB
+  `lifecycle_audit` table (sequence-allocated via `CREATE SEQUENCE` —
+  concurrency-safe, never reused; `verify_audit_chain()` with tamper test)
+  is the single authoritative append-only store; the per-experiment file is
+  renamed `audit_projection.json` and self-describes as a MATERIALIZED
+  PROJECTION. Registration stages files with a `.pending` marker inside the
+  DB transaction; failures roll back and remove staged files (fault-injection
+  test: no orphan dir, no row, sequence gap not reuse); crash-window recovery
+  on open re-materializes committed rows (audited `RECOVERED_PROJECTION`),
+  while a missing record WITHOUT the marker is tampering and is never
+  restored. Refusals are durably recorded in their own transaction.
+- **(5) §38 completed:** `source_dataset_hashes` is a required
+  pre-registration field; terminal transitions accept an outputs manifest
+  (stored, shown; refused pre-terminal); parent experiment references are
+  validated; prereg/outputs are JSON documents so metrics/predictions can be
+  added without redesign. Schema version bumped to 2 (v1 refusal test
+  retained). Synthetic registrations only.
+- **(6) Corrected reporting:** working tree is 9 modified tracked + 9 new
+  untracked files (18 total, incl. this log and the two new loader modules).
+  Config hash unchanged (`95a9dd78…6874163d`); current package source hash
+  after remediation `b0f7285c896a964e998cf6b86f8188eca5dc6c9ef4247ebca5a084f51408afb8`
+  (the audit-time value `931b160f…` was the pre-remediation tree). The 12
+  Milestone 0 artifacts correctly retain their historical closeout code-hash
+  and commit binding and were NOT regenerated; live `require_provenance()`
+  PASSes because the seven acquisition-semantics modules are byte-untouched
+  (verified via git status).
+- **Verification:** 299/299 tests; live research API fail-closed; no active
+  partition configuration exists; QA-only enumeration available solely to
+  the allowlisted audit modules; raw data and all existing QA artifacts
+  untouched.
+- **Status:** remains **PENDING_INDEPENDENT_AUDIT** pending a fresh re-audit.
+- **Commit:** pending re-audit; not executed.
+
+## AL-0034 — Second re-audit CHANGES_REQUIRED; remediation of the seven findings
+
+- **Category:** audit/review finding + implementation fix (builder)
+- **Verdict recorded:** re-audit reproduced that
+  `sources.research_input_files()` still returned all 625 files (the
+  allowlist only constrained internal static call sites), that raw UTC-day
+  paths are unsafe research data at session boundaries (UTC file 2026-03-31
+  carries both the last SELECTION and the first HOLDOUT session), that
+  activation only format-checked hashes, that provenance was not enforced in
+  the research path, that chain verification/`show(verify=False)` and the
+  audit.json rewrite left fail-open paths, that recovery could reconstruct
+  tampered records, and that §38 identities/outputs were under-validated.
+- **(1) Legacy API removed from the gate-bound module (as directed):**
+  `sources.research_input_entries/files` DELETED; enumeration is now the
+  private `sources._canonical_corpus_entries`, exposed only through the
+  QA-named `qa_corpus` wrappers; QA callers updated
+  (`qa/mbp1_acquisition.py`, `qa/full_history_audit.py`); tests prove the
+  public legacy attributes are ABSENT (not merely unreferenced).
+  **Consequence: the acquisition-gate code binding is now STALE by design**
+  (`require_provenance()` currently refuses with "generated by different
+  acquisition/provenance code") — the 12 Milestone 0 artifacts were NOT
+  regenerated in this pass; the re-bind belongs to the later reviewed
+  commit-and-restamp sequence.
+- **(2) No raw paths as research data:** `research.py` now gates (fence,
+  then `require_provenance()`) and then REFUSES with
+  `ResearchLoaderNotImplementedError` — raw UTC-day paths are never returned
+  to research consumers. The Milestone 2 reader contract is recorded in the
+  module (internal UTC-day halo load, session_id assignment before release,
+  discard of out-of-approval events, no raw-path exposure). Regression tests
+  pin the real SELECTION/HOLDOUT boundary overlap and the refusal even with
+  gates monkeypatched open.
+- **(3) Activation bound to actual evidence:**
+  `holdout._verify_activation_evidence` verifies the real SHA-256 of the
+  approved `partition_proposal.json`, exact DEV/SELECTION/HOLDOUT range
+  equality with it, its structural checks all PASS, artifact type, and the
+  CURRENT `calendar_identity()` effective-calendar SHA. Fabricated 64-hex
+  values fail (tested). The public loader applies schema + evidence; no
+  injection parameters. A separate `active_partitions_sha256` research-
+  configuration identity is captured in experiment reproducibility metadata
+  (None while inactive) without touching acquisition semantics.
+- **(4) Provenance enforced in the research path:** the single research
+  entry point invokes `require_provenance()` after the fence and before
+  anything else (source-inspection test).
+- **(5) Chain fail-closed + single-writer:** `verify_audit_chain()` runs on
+  open (before recovery) and before every registration, inspection, and
+  transition; a corrupted chain blocks reopen/show/register/transition
+  (tests). `show(verify=False)` removed — private `_show_unverified`
+  diagnostic only. Single-writer is now EXPLICITLY enforced via an exclusive
+  lock file (DuckDB shares its in-process instance, so its own lock was
+  insufficient — the earlier "concurrency-safe" wording is withdrawn);
+  second-open refusal tested; locks are never stolen.
+- **(6) Durable crash/tamper states:** experiments carry
+  `record_state` (PENDING_PROJECTION → FINALIZED) in the DB; recovery
+  re-materializes ONLY committed PENDING rows (audited RECOVERED_PROJECTION
+  + finalize); a FINALIZED record later deleted is tampering — never
+  reconstructed, fails closed on show/use; pre-commit orphan pending
+  directories are deterministically quarantined (`*.orphaned`, audited)
+  and never treated as experiments. Regression tests cover each crash point.
+- **(7) §38 identities validated:** `source_dataset_hashes` must be
+  normalized `sha256:<64-hex>` (bare hex normalized; arbitrary strings
+  fail); terminal outputs use a structured `OutputsManifest`
+  (name/type/location/size/sha256 per output; explicitly empty allowed for
+  synthetic/null runs; arbitrary dicts rejected). Registry schema v3.
+- **Verification:** 316/316 tests. Live: legacy sources research API absent;
+  research API fail-closed; no active partition configuration; config hash
+  unchanged `95a9dd78…6874163d`; package hash now
+  `ac1ad8cfb02cd4b29adf7ef4ef23d176b0dde935a2d538b4153c14f20affb6ad`;
+  provenance STALE-BY-DESIGN as documented above; raw data and existing QA
+  artifacts untouched. Working tree: 12 modified tracked + 9 new untracked.
+- **Status:** **PENDING_INDEPENDENT_AUDIT**.
+- **Commit:** pending re-audit; not executed.
+
+## AL-0035 — Third re-audit CHANGES_REQUIRED (four functional + hygiene); remediation
+
+- **Category:** audit/review finding + implementation fix (builder)
+- **(1) Activation evidence rejects the live provisional proposal:**
+  `_verify_activation_evidence` now additionally requires top-level
+  status==PASS; the structural-check set to EXACTLY equal
+  {boundaries_on_trading_days, partition_ranges_contiguous,
+  no_partition_spanning_mbo_blocks} with every check PASS;
+  `activation_ready == true`;
+  `calendar_verification_state == DOCUMENT_VERIFIED`; and the
+  official-calendar baseline verification to be ACTUALLY complete
+  (overrides meta.baseline_verification.status and every holiday group
+  DOCUMENT_VERIFIED) — plus the existing real-SHA/range/calendar bindings
+  and the immutable approval record (partitions_active.yaml ApprovalRecord
+  with approval_reference). The historical provisional proposal was NOT
+  altered; regression tests prove both a synthetic proposal with the exact
+  current provisional states AND the real on-disk provisional artifact are
+  rejected, and that today's PENDING baseline verification fails closed.
+- **(2) FINALIZED is now the LAST durable step:** registration commits the
+  row as PENDING_PROJECTION, then writes the projection, verifies it exists,
+  clears and verifies the pending marker, and only then commits
+  record_state=FINALIZED. Failures at any point leave the row PENDING;
+  reopening completes it idempotently (audited RECOVERED_PROJECTION +
+  identical finalize path). A FINALIZED row with a pending marker or missing
+  projection is an INCONSISTENCY that fails the registry open. Injected-
+  failure regression tests: marker-removal failure, projection-write
+  failure, crash-after-projection-before-FINALIZED — each reopen yields
+  exactly one valid experiment, complete projection, no marker, intact
+  chain; plus both inconsistency cases.
+- **(3) Chain verification covers every public inspection:** `list()` and
+  `trial_count()` (and therefore the CLI list/show/transition paths, since a
+  corrupted chain also fails registry open) verify the chain first; tests
+  prove corrupted evidence blocks list, trial_count, and the CLI operations.
+- **(4) Terminal output manifests genuinely mandatory:** every
+  RUNNING→terminal transition REQUIRES an explicit validated
+  OutputsManifest — omission is refused, never treated as empty; synthetic
+  runs pass an explicitly empty manifest. Pre-terminal `outputs` is stored
+  and shown as JSON null. CLI gains `nqr exp transition --outputs
+  MANIFEST_YAML`; missing/invalid terminal manifests are refused through
+  the CLI (tested).
+- **(5) Hygiene:** test_sources.py whitespace/EOL normalized (an
+  intermediate PowerShell rewrite had introduced CRLF/BOM and mojibake in a
+  registry test file — both repaired); `git diff --check` exits 0.
+- **Verification:** 328/328 tests; config hash unchanged
+  `95a9dd78…6874163d`; package hash
+  `92d219a47d816cc310d7728e0ee234d32ed3fb401891888bc32bdc0afc695d2d`;
+  provenance STALE-BY-DESIGN (unchanged from AL-0034; re-bind reserved for
+  the reviewed commit-and-restamp); the 12 QA artifacts and raw data
+  untouched; no active partitions; nothing committed/pushed.
+- **Status:** **PENDING_INDEPENDENT_AUDIT**.
+
+## AL-0036 — Fourth re-audit CHANGES_REQUIRED (two consistency defects); remediation
+
+- **Category:** audit/review finding + implementation fix (builder)
+- **(1) Activation evidence made internally coherent and plan-bound:**
+  `_verify_activation_evidence` now requires the proposal `state ==
+  APPROVED_FOR_ACTIVATION` (the reproduced PROPOSED_NOT_ACTIVE +
+  activation_ready=true combination fails on state; approved+ready=false and
+  approved+pending-calendar fail as contradictions). The baseline verifier
+  binds the COMPLETE frozen nine-group verification plan
+  (`EXPECTED_BASELINE_GROUPS`, byte-identical to the committed overrides):
+  missing, renamed, duplicated, or unexpected groups fail; every
+  DOCUMENT_VERIFIED group must carry attributable official-document evidence
+  (source_reference + document_sha256); any declared-but-pending document
+  identity in the overrides references (the real Jan-9 PDF, sha null) blocks
+  activation. Human approval is now REAL, mechanically validated against the
+  append-only audit log: approval_reference must name an AL-nnnn entry whose
+  text cites the exact approved proposal SHA-256 — absent or unbound
+  evidence fails. No activation artifact/configuration created; overrides
+  yaml unchanged (config hash preserved). Tests cover every refusal listed
+  by the re-audit.
+- **(2) Projections made crash-consistent for ALL audit-producing
+  operations:** projections now carry `event_count` + `head_hash` and are
+  written by atomic temp-write-and-replace; open, recovery, and every
+  verified inspection compare projection head/count/events against the
+  verified DuckDB chain and rebuild atomically on any mismatch
+  (missing/stale/truncated/partial = recoverable materialized-view
+  condition — this supersedes AL-0035's open-blocking behavior for the
+  missing-projection case; the FINALIZED+pending-marker registration
+  inconsistency remains open-blocking, and missing experiment DIRECTORIES
+  remain tampering, never recreated). A projection-write failure after a
+  COMMITTED transition now raises the distinct
+  `ProjectionRecoveryRequiredError` stating explicitly that lifecycle state
+  changed — never an ambiguous failure; after an audited refusal the
+  original refusal surfaces and the projection reconciles later.
+  Injected-failure tests: post-terminal-commit projection failure (status
+  committed; reopen reconciles; committed transition appears exactly once),
+  post-refusal projection failure, stale projection on reopen, truncated
+  JSON, mismatched head/count — each ends with projection == verified chain.
+- **Verification:** 342/342 tests; `git diff --check` clean; config hash
+  unchanged `95a9dd78…6874163d`; package hash
+  `2237f8b7ae9cdf3f5f882e852c9b0633709ed5d70d9f54bcc761447e54bda59a`;
+  provenance STALE-BY-DESIGN (unchanged posture); no activation config; raw
+  data and QA artifacts untouched; nothing committed/pushed.
+- **Status:** **PENDING_INDEPENDENT_AUDIT**.

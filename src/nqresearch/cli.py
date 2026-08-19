@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from nqresearch import paths
 from nqresearch.qa import status as st
@@ -228,13 +229,70 @@ def main(argv: list[str] | None = None) -> int:
         help="check free space on the configured data volume (spec 2.2/59)",
     )
 
+    exp = sub.add_parser("exp", help="experiment registry (canonical §37/§38)")
+    exp_sub = exp.add_subparsers(dest="exp_command", required=True)
+    reg = exp_sub.add_parser("register", help="register a pre-registration YAML")
+    reg.add_argument("prereg_yaml", help="path to a §37 pre-registration YAML")
+    show = exp_sub.add_parser("show", help="show a registered experiment")
+    show.add_argument("experiment_id")
+    exp_sub.add_parser("list", help="list all experiments (incl. failed)")
+    trans = exp_sub.add_parser("transition", help="lifecycle transition")
+    trans.add_argument("experiment_id")
+    trans.add_argument("new_status")
+    trans.add_argument("--note", default="")
+    trans.add_argument(
+        "--outputs", default=None, metavar="MANIFEST_YAML",
+        help="OutputsManifest file — REQUIRED for terminal transitions "
+             "(explicitly empty manifests allowed for synthetic runs)",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "data" and args.data_command == "audit":
         return _run_audit(args.part, args.chunk_rows)
     if args.command == "data" and args.data_command == "storage-gate":
         return 0 if _run_storage_gate() != st.FAIL else 1
+    if args.command == "exp":
+        return _run_exp(args)
     parser.error("unknown command")
     return 2
+
+
+def _run_exp(args) -> int:
+    import json
+
+    import yaml
+
+    from nqresearch.experiments.models import PreRegistration
+    from nqresearch.experiments.registry import ExperimentRegistry, RegistryError
+
+    try:
+        with ExperimentRegistry() as reg:
+            if args.exp_command == "register":
+                prereg = PreRegistration(
+                    **yaml.safe_load(Path(args.prereg_yaml).read_text(encoding="utf-8"))
+                )
+                exp_id = reg.register(prereg)
+                print(f"registered {exp_id} (status PLANNED)")
+            elif args.exp_command == "show":
+                print(json.dumps(reg.show(args.experiment_id), indent=1))
+            elif args.exp_command == "list":
+                for row in reg.list():
+                    print(f"{row['experiment_id']}  trial={row['trial_number']}  "
+                          f"{row['status']}")
+            elif args.exp_command == "transition":
+                outputs = None
+                if args.outputs is not None:
+                    outputs = yaml.safe_load(
+                        Path(args.outputs).read_text(encoding="utf-8")
+                    )
+                rec = reg.transition(args.experiment_id, args.new_status,
+                                     args.note, outputs=outputs)
+                print(f"{args.experiment_id}: {rec['from_status']} -> "
+                      f"{rec['to_status']}")
+        return 0
+    except RegistryError as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

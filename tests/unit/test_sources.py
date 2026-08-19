@@ -15,12 +15,12 @@ from nqresearch.config import (
     effective_config_hash,
     load_mbp1_sources,
 )
+from nqresearch.qa_corpus import qa_corpus_files
 from nqresearch.sources import (
     ResearchOverlapError,
     SourceRegistryError,
     m0_sample_dir,
     qa_sample_source,
-    research_input_files,
     source_dir,
     validate_adjacent_ranges,
 )
@@ -165,7 +165,7 @@ class TestResearchInput:
             _src("J2", ROLE_FULL_HISTORY, 10, 20, path="raw/mbp1/b/J2"),
             _src("QA", ROLE_M0_QA_SAMPLE, 3, 6, path="raw/mbp1/s/QA"),
         ])
-        files = research_input_files(reg, tmp_path)
+        files = qa_corpus_files(reg, tmp_path)
         assert sorted(files) == ["20240818", "20240819", "20240820"]
         # The QA sample's copy of 20240819 must NOT be the selected file.
         assert "raw" in str(files["20240819"])
@@ -180,14 +180,14 @@ class TestResearchInput:
             _src("J2", ROLE_FULL_HISTORY, 10, 20, path="raw/mbp1/b/J2"),
         ])
         with pytest.raises(ResearchOverlapError):
-            research_input_files(reg, tmp_path)
+            qa_corpus_files(reg, tmp_path)
 
     def test_no_eligible_sources_fails(self, tmp_path):
         reg = Mbp1SourceRegistry(sources=[
             _src("QA", ROLE_M0_QA_SAMPLE, 0, 1, path="raw/mbp1/s/QA"),
         ])
         with pytest.raises(SourceRegistryError):
-            research_input_files(reg, tmp_path)
+            qa_corpus_files(reg, tmp_path)
 
 
 class TestSampleScoping:
