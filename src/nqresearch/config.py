@@ -220,10 +220,15 @@ def effective_config_hash(repo_root: Path | None = None) -> str:
     parsed config/data/paths.yaml (plus the resolved data root, so an
     NQR_DATA_ROOT override changes the hash), parsed config/data/sessions.yaml,
     the parsed config/data/mbp1_sources.yaml registry, and the file hashes of
-    config/data/cme_calendar.yaml and config/data/cme_calendar_overrides.yaml.
-    Any session-timezone/boundary/RTH, data-path, source-registry or calendar
-    change therefore invalidates config-keyed caches and is visible in QA
-    artifact envelopes.
+    config/data/cme_calendar.yaml, config/data/cme_calendar_overrides.yaml and
+    config/data/research_eligibility.yaml.
+    Any session-timezone/boundary/RTH, data-path, source-registry, calendar or
+    research-eligibility change therefore invalidates config-keyed caches and
+    is visible in QA artifact envelopes.
+
+    research_eligibility.yaml (the PA-0002 quarantine mask) IS included: it
+    determines which sessions any derived research dataset may contain, so it
+    is part of research reproducibility identity, not mere bookkeeping.
 
     Deliberately NOT included: config/data/cme_calendar_evidence.yaml (the
     PA-0001 calendar evidence matrix). It gates PARTITION ACTIVATION, not
@@ -248,6 +253,11 @@ def effective_config_hash(repo_root: Path | None = None) -> str:
         hashlib.sha256(ov_path.read_bytes()).hexdigest()
         if ov_path.is_file() else None
     )
+    el_path = root / "config" / "data" / "research_eligibility.yaml"
+    el_sha = (
+        hashlib.sha256(el_path.read_bytes()).hexdigest()
+        if el_path.is_file() else None
+    )
     payload = {
         "data_paths": dp.model_dump(),
         "sessions": sc.model_dump(),
@@ -255,6 +265,7 @@ def effective_config_hash(repo_root: Path | None = None) -> str:
         "mbp1_sources": reg.model_dump(by_alias=True),
         "cme_calendar_sha256": cal_sha,
         "cme_calendar_overrides_sha256": ov_sha,
+        "research_eligibility_sha256": el_sha,
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()

@@ -36,7 +36,23 @@ calendar/MBO-block/partition structural checks PASS; the activation binding
 the exact SHA-256 of the approved proposal, effective calendar, evidence
 matrix and GCC correspondence; and an append-only audit-log entry recording
 explicit human approval of those exact hashes (all enforced fail-closed by
-`nqresearch/holdout.py`). Historical note: freezing the dates was a
+`nqresearch/holdout.py`).
+
+Under the proposed **PA-0002 research-eligibility quarantine** (data-spec
+§6d) the ten `PENDING_EVIDENCE` dates are dispositioned — not verified —
+by a committed policy (`config/data/research_eligibility.yaml`), whose
+SHA-256 becomes a further mandatory activation binding alongside the
+proposal, effective-calendar, evidence-matrix and GCC-correspondence hashes.
+All ten lie inside DEV; **none is in SELECTION or HOLDOUT and none is a
+partition boundary**, so HOLDOUT is entirely unaffected and remains sealed.
+`CONFLICT_REQUIRES_REVIEW` can never be dispositioned by quarantine, the
+calendar is never relabelled `DOCUMENT_VERIFIED` (it stays
+`PROVISIONAL_PENDING_DATES_QUARANTINED`), and **quarantine alone is never
+permission to open HOLDOUT** — the separate opening workflow of §4 below
+still governs, and partitions remain `PROPOSED_NOT_ACTIVE` with
+`activation_ready=false`.
+
+Historical note: freezing the dates was a
 Milestone 0 deliverable (canonical §60 items 11–12) and must precede feature
 research.
 

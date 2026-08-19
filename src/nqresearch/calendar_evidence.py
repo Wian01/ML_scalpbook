@@ -137,6 +137,15 @@ EXPECTED_EXCEPTIONAL_DATES: dict[str, str] = {
 # artifacts once (and only once) every date is resolved without conflicts.
 CALENDAR_EVIDENCE_COMPLETE_STATE = "CALENDAR_EVIDENCE_COMPLETE_DATE_LEVEL"
 CALENDAR_EVIDENCE_PENDING_STATE = "PROVISIONAL_DOCUMENT_VERIFICATION_PENDING"
+# PA-0002: pending dates may be DISPOSITIONED (not resolved) by a reviewed
+# research-eligibility quarantine. The calendar stays explicitly PROVISIONAL
+# and no evidence state is ever upgraded or relabelled by this mechanism.
+CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED = (
+    "PROVISIONAL_PENDING_DATES_QUARANTINED"
+)
+
+DISPOSITION_EVIDENCE_COMPLETE = "EVIDENCE_COMPLETE"
+DISPOSITION_PENDING_DATES_QUARANTINED = "PENDING_DATES_QUARANTINED"
 
 _SHA256_HEX = set("0123456789abcdef")
 
@@ -701,6 +710,71 @@ def unresolved_dates(matrix: EvidenceMatrix) -> dict[str, str]:
     }
 
 
+def conflict_dates(matrix: EvidenceMatrix) -> dict[str, str]:
+    return {d.date.isoformat(): d.state for d in matrix.dates
+            if d.state == STATE_CONFLICT}
+
+
+def pending_dates(matrix: EvidenceMatrix) -> dict[str, str]:
+    return {d.date.isoformat(): d.state for d in matrix.dates
+            if d.state == STATE_PENDING}
+
+
+def resolve_activation_disposition(matrix: EvidenceMatrix,
+                                   quarantined: frozenset[str] | set[str]
+                                   ) -> str:
+    """Activation-resolution check (PA-0002) — SEPARATE from evidence.
+
+    This never reads, writes, or upgrades an evidence state. It answers one
+    question: given the true evidence states plus a reviewed quarantine
+    policy, may activation proceed, and under which named disposition?
+
+    Semantics (fail-closed):
+    - DOCUMENT_VERIFIED and TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE are
+      evidence-complete;
+    - CONFLICT_REQUIRES_REVIEW ALWAYS blocks and can never be dispositioned
+      by quarantine;
+    - a PENDING_EVIDENCE date may be dispositioned only if it appears
+      exactly in the bound quarantine policy, and EVERY pending date must be
+      so covered; an extra, missing, or substituted quarantine date fails
+      closed (in particular a verified/triangulated date can never be
+      silently quarantined);
+    - with no pending dates the disposition is EVIDENCE_COMPLETE; otherwise
+      PENDING_DATES_QUARANTINED, under which the calendar remains explicitly
+      provisional and is never relabelled DOCUMENT_VERIFIED.
+    """
+    conflicts = conflict_dates(matrix)
+    if conflicts:
+        raise CalendarEvidenceError(
+            f"calendar evidence has unresolved conflicts {sorted(conflicts)}: "
+            "a conflict can NEVER be resolved by quarantine; failing closed"
+        )
+    pending = set(pending_dates(matrix))
+    unresolved = set(unresolved_dates(matrix))
+    if unresolved != pending:  # defensive: any non-pending unresolved state
+        raise CalendarEvidenceError(
+            f"unresolved dates {sorted(unresolved - pending)} are neither "
+            "pending nor conflicting; failing closed"
+        )
+    q = set(quarantined)
+    if not pending:
+        if q:
+            raise CalendarEvidenceError(
+                "quarantine policy declares dates "
+                f"{sorted(q)} but no calendar date is pending: verified or "
+                "triangulated dates are never silently quarantined; "
+                "failing closed"
+            )
+        return DISPOSITION_EVIDENCE_COMPLETE
+    if q != pending:
+        raise CalendarEvidenceError(
+            "quarantine policy does not exactly cover the pending dates "
+            f"(missing: {sorted(pending - q)}; unexpected: {sorted(q - pending)}"
+            "); failing closed"
+        )
+    return DISPOSITION_PENDING_DATES_QUARANTINED
+
+
 def verify_observed_against_coverage(matrix: EvidenceMatrix,
                                      coverage_path: Path) -> None:
     """Cross-check every transcribed observed block against the live
@@ -793,11 +867,30 @@ def load_validated_matrix(repo_root: Path, data_root: Path) -> EvidenceMatrix:
 def current_calendar_verification_state(repo_root: Path,
                                         data_root: Path) -> str:
     """Artifact-level state for regenerated closeout artifacts. NEVER claims
-    completeness on any validation failure (fail-safe direction: pending)."""
+    completeness on any validation failure (fail-safe direction: pending).
+
+    Under PA-0002 a fully-quarantined pending set yields the explicitly
+    PROVISIONAL state PROVISIONAL_PENDING_DATES_QUARANTINED — never
+    DOCUMENT_VERIFIED and never the complete state.
+    """
     try:
         matrix = load_validated_matrix(repo_root, data_root)
     except Exception:
         return CALENDAR_EVIDENCE_PENDING_STATE
     if evidence_complete(matrix):
         return CALENDAR_EVIDENCE_COMPLETE_STATE
+    # The quarantine disposition may ONLY be emitted through the fully
+    # validated policy path: a stale evidence-matrix binding, a malformed or
+    # non-PA-0002 policy, or an inconsistent date set all fall back to the
+    # ordinary provisional/pending state.
+    # Imported OUTSIDE the try: a wrong/renamed symbol must raise loudly
+    # rather than be swallowed into the fail-safe pending path.
+    from nqresearch.eligibility import load_policy_for_reporting
+
+    try:
+        _policy, disposition = load_policy_for_reporting(repo_root, data_root)
+    except Exception:
+        return CALENDAR_EVIDENCE_PENDING_STATE
+    if disposition == DISPOSITION_PENDING_DATES_QUARANTINED:
+        return CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED
     return CALENDAR_EVIDENCE_PENDING_STATE

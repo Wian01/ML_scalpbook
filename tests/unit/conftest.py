@@ -192,8 +192,31 @@ def write_coverage_for(data_root, matrix_doc):
         for d in matrix_doc["dates"] if d["observed"]["session_present"]
     ]
     p = cov_dir / "mbp1_full_history_coverage.json"
-    p.write_text(json.dumps({"artifact": "mbp1_full_history_coverage",
-                             "sessions": sessions}))
+    # Coverage substance mirrors the real corpus state: only the understood
+    # pre-RTH Good Friday WARN, zero FAILs, no missing sessions, no ordering
+    # violations, and the frozen 516 expected-session count.
+    p.write_text(json.dumps({
+        **clean_envelope(),
+        "artifact": "mbp1_full_history_coverage",
+        "status": "WARN",
+        "n_expected_complete_sessions": 516,
+        "n_fail": 0,
+        "missing_sessions": [],
+        "cross_file_order_violations": 0,
+        "missing_pre_rth_short_sessions": ["2025-04-18"],
+        "checks": [
+            {"check": "no_missing_expected_sessions", "status": "PASS",
+             "detail": "synthetic"},
+            {"check": "pre_rth_short_sessions_without_data", "status": "WARN",
+             "detail": "synthetic understood WARN"},
+            {"check": "no_session_fails", "status": "PASS",
+             "detail": "synthetic"},
+            {"check": "degraded_dates_assessed", "status": "PASS",
+             "detail": "synthetic"},
+            {"check": "cross_file_monotonic_order", "status": "PASS",
+             "detail": "synthetic"},
+        ],
+        "sessions": sessions}))
     matrix_doc["meta"]["observed_reference"]["artifact_sha256"] = (
         hashlib.sha256(p.read_bytes()).hexdigest()
     )
@@ -220,4 +243,115 @@ def write_matrix(repo_root, matrix_doc):
     p = repo_root / "config" / "data" / "cme_calendar_evidence.yaml"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(yaml.safe_dump(matrix_doc, sort_keys=False))
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def eligibility_policy_doc(matrix_sha, dates=(), status=None,
+                           meta_override=None, **semantics_override):
+    """Schema-valid PA-0002 policy over the given (possibly empty) dates.
+
+    Uses the REAL PA-0002 identity constants and a legitimate lifecycle
+    state (default: APPROVED_FOR_ACTIVATION, so activation fixtures reach
+    the checks under test); never an arbitrary placeholder.
+    """
+    from nqresearch.eligibility import (
+        PA0002_AMENDMENT_PATH,
+        PA0002_POLICY_ID,
+        PA0002_REASON_CODE,
+        POLICY_STATE_APPROVED,
+    )
+    semantics = {
+        "qa_and_normalization_use": "ALLOWED_FOR_QA_AND_SESSION_RECONSTRUCTION",
+        "research_use": "FORBIDDEN",
+        "feature_window_crossing": "FORBIDDEN",
+        "label_horizon_crossing": "FORBIDDEN",
+        "evaluation_window_crossing": "FORBIDDEN",
+        "rolling_state_reset_required_at_next_eligible_session": True,
+        "prior_session_state_features_require_policy_review": True,
+        "calendar_membership_unchanged": True,
+        "partition_contiguity_unchanged": True,
+        "coverage_counts_unchanged": True,
+        "causal_roll_series_consumes_eligibility": False,
+        "raw_data_unchanged": True,
+        "n_mbo_blocks_quarantined": 0,
+        "holdout_sealed": True,
+    }
+    semantics.update(semantics_override)
+    meta = {
+        "policy_id": PA0002_POLICY_ID,
+        "policy_version": 1,
+        "amendment": PA0002_AMENDMENT_PATH,
+        "status": status or POLICY_STATE_APPROVED,
+        "canonical_basis": "canonical §50 predefined holiday/partial-session",
+        "evidence_matrix_sha256": matrix_sha,
+        "rationale": "synthetic fixture rationale",
+    }
+    meta.update(meta_override or {})
+    return {
+        "meta": meta,
+        "semantics": semantics,
+        "quarantined_sessions": [
+            {"date": d, "research_eligible": False,
+             "reason_code": PA0002_REASON_CODE,
+             "evidence_state_at_policy_time": "PENDING_EVIDENCE",
+             "note": "synthetic fixture note"}
+            for d in sorted(dates)
+        ],
+    }
+
+
+def clean_envelope():
+    """A provenance envelope satisfying the AL-0043/44/45 activation policy:
+    clean generation at a REAL ancestral commit of the project repository,
+    under the current effective config and package code."""
+    import subprocess
+
+    from nqresearch import paths
+    from nqresearch.config import effective_config_hash
+    from nqresearch.qa.cache import package_source_hash
+
+    sha = subprocess.run(["git", "-C", str(paths.ROOT), "rev-parse", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    return {
+        "git_sha": sha,
+        "generation_git_clean": True,
+        "restamp_note": "Generated from a clean committed tree at the "
+                        "recorded git_sha.",
+        "config_hash": effective_config_hash(),
+        "audit_code_hash": package_source_hash(),
+    }
+
+
+def write_structural_artifacts(data_root, matrix_doc=None):
+    """Minimal but structurally valid MBO-block and front-series artifacts,
+    with per-artifact permitted statuses and clean provenance envelopes, so
+    activation's identity/structure/envelope checks can run against
+    synthetic trees. Returns their SHA-256 identities."""
+    close = data_root / "qa" / "m0_closeout"
+    close.mkdir(parents=True, exist_ok=True)
+    env = clean_envelope()
+    out = {}
+    for fname, doc in [
+        ("mbo_blocks_frozen.json",
+         {**env, "artifact": "mbo_blocks_frozen", "status": "PASS",
+          "blocks": [{"mbo_lab_block_id": "MBO-BLK-001",
+                      "start": "2099-01-06", "end": "2099-01-06",
+                      "n_sessions": 1, "sessions": ["2099-01-06"]}],
+          "n_blocks": 1}),
+        ("mbp1_front_contract_series.json",
+         {**env, "artifact": "mbp1_front_contract_series", "status": "PASS",
+          "switches": [], "n_switches": 0, "per_session": []}),
+    ]:
+        p = close / fname
+        p.write_text(json.dumps(doc))
+        out[fname] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return out
+
+
+def write_eligibility_policy(repo_root, matrix_sha, dates=(), doc=None):
+    p = repo_root / "config" / "data" / "research_eligibility.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(yaml.safe_dump(
+        doc if doc is not None else eligibility_policy_doc(matrix_sha, dates),
+        sort_keys=False))
     return hashlib.sha256(p.read_bytes()).hexdigest()

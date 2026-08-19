@@ -170,6 +170,19 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   8 dates DOCUMENT_VERIFIED (incl. 2025-01-09 + all seven 2026 dates),
   8 TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, **10 PENDING_EVIDENCE**,
   0 conflicts — evidence incomplete, activation still blocked.
+- **Research-eligibility quarantine PROPOSED 2026-08-19 (PA-0002,
+  `config/data/research_eligibility.yaml` + `nqresearch/eligibility.py`):**
+  the 10 PENDING_EVIDENCE dates are marked research-ineligible under
+  canonical §50's predefined holiday/partial-session rule. **Their evidence
+  states stay `PENDING_EVIDENCE` — quarantine is never a verification
+  claim** and the calendar stays provisional. Only **8 observed DEV sessions
+  are lost (317 → 309)**; 2025-01-01 is not a trading day and 2025-04-18 has
+  no usable data. Raw data and QA/normalization keep the sessions; research
+  input, and any feature/label/sample/evaluation window touching or crossing
+  them, is forbidden, with state reset at the next eligible session.
+  **No MBO block is quarantined** (77/30 unchanged), coverage stays 516,
+  the 8 causal roll switches are unchanged, and **partitions remain
+  inactive**.
 - No features, labels, sampling, models, experiments, activated holdout
   partition, protected holdout dataset, or holdout opening exists yet; only
   the unactivated tentative HOLDOUT proposal exists (data-spec §6a).

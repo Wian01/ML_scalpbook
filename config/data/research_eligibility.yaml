@@ -1,0 +1,135 @@
+# Research-eligibility policy (protocol amendment PA-0002).
+#
+# This file is a RESEARCH-POLICY disposition layer. It does NOT record or
+# alter calendar evidence: every date below remains PENDING_EVIDENCE in
+# config/data/cme_calendar_evidence.yaml, and the effective calendar stays
+# explicitly provisional. Quarantine means "never research input"; it never
+# means "verified".
+#
+# Enforced fail-closed by nqresearch.eligibility (strict schema, extra
+# fields forbidden, unique + ascending dates) and bound into partition
+# activation by nqresearch.holdout.
+meta:
+  policy_id: PA-0002-research-quarantine-v1
+  policy_version: 1
+  amendment: docs/protocol-amendments/PA-0002-research-eligibility-quarantine.md
+  # Lifecycle: PROPOSED_PENDING_INDEPENDENT_REVIEW ->
+  # IMPLEMENTED_PENDING_ACTIVATION_APPROVAL -> APPROVED_FOR_ACTIVATION.
+  # ONLY the approved state can ever satisfy partition activation; this
+  # policy is deliberately NOT approved while under review.
+  status: IMPLEMENTED_PENDING_ACTIVATION_APPROVAL
+  canonical_basis: >-
+    canonical §50 allowed exclusion "predefined holiday/partial-session
+    rule", with a machine-readable reason code per excluded session; defined
+    in advance of any feature, label, model or result, and therefore not one
+    of §50's forbidden outcome-driven exclusions.
+  evidence_matrix_sha256: 89cc29fda3bf079cfc4c853e5cacc6f10480665f6dbc247265f21ff9a8570aad
+  rationale: >-
+    CME confirmed no archive of previous years' holiday calendars exists, so
+    these ten exceptional sessions have no independent corroboration of their
+    official schedule. Observed vendor data agrees with the baseline calendar
+    to within 0.3 s, but that is agreement between our data and our own
+    calendar: a baseline error would propagate self-consistently through
+    session assignment, RTH windowing, labels and evaluation without
+    detection. Excluding the sessions from research costs 8 of 317 observed
+    DEV sessions (2.5%) and preserves PA-0001's evidence threshold intact.
+
+# Machine-readable semantics of the mask. Every flag below is asserted by
+# tests against the real corpus artifacts; none of them may be weakened
+# without a further reviewed amendment.
+semantics:
+  qa_and_normalization_use: ALLOWED_FOR_QA_AND_SESSION_RECONSTRUCTION
+  research_use: FORBIDDEN
+  feature_window_crossing: FORBIDDEN
+  label_horizon_crossing: FORBIDDEN
+  evaluation_window_crossing: FORBIDDEN
+  rolling_state_reset_required_at_next_eligible_session: true
+  prior_session_state_features_require_policy_review: true
+  calendar_membership_unchanged: true
+  partition_contiguity_unchanged: true
+  coverage_counts_unchanged: true
+  causal_roll_series_consumes_eligibility: false
+  raw_data_unchanged: true
+  n_mbo_blocks_quarantined: 0
+  holdout_sealed: true
+
+# Exactly the sessions whose calendar evidence is PENDING_EVIDENCE.
+# Ascending, unique; research_eligible must be false for every entry.
+quarantined_sessions:
+  - date: '2024-09-02'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Labor Day 2024; RTH 08:30-12:00 CT halt. Observed 12,599.9 s vs 12,600
+      expected. No qualifying independent secondary source.
+  - date: '2024-11-29'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Day after Thanksgiving 2024; RTH 08:30-12:15 CT close. Observed
+      13,499.9 s. The only secondary statement about this day was excluded
+      as ambiguous (it omits the 12:15 close).
+  - date: '2025-01-01'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      New Year's Day 2025; full holiday, NOT a CME trading day and no
+      session exists. Quarantine is a formality here: it could never produce
+      a research sample.
+  - date: '2025-01-20'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      MLK Day 2025; RTH 08:30-12:00 CT halt. Observed 12,599.9 s. Only
+      lower-tier and date-only corroboration exists.
+  - date: '2025-02-17'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Presidents' Day 2025; RTH 08:30-12:00 CT halt. Observed 12,600.0 s.
+      Only lower-tier and date-only corroboration exists.
+  - date: '2025-04-18'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Good Friday 2025; scheduled close 08:15 CT, before the 08:30 RTH open,
+      so zero RTH by schedule, and additionally NO usable vendor records
+      exist (missing_pre_rth_short_session). Could never produce a sample.
+  - date: '2025-05-26'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Memorial Day 2025; RTH 08:30-12:00 CT halt. Observed 12,599.7 s. The
+      expected strong secondary source drifted to 2026-only content.
+  - date: '2025-06-19'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Juneteenth 2025; RTH 08:30-12:00 CT halt. Observed 12,599.9 s. No
+      secondary source covers this date's schedule at all. Remains recorded
+      as roll-week adjacent to the 2025-06-17 NQM5->NQU5 switch in the
+      data-level causal roll series, which is unaffected by this mask.
+  - date: '2025-07-03'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Pre-Independence-Day early close 2025; RTH 08:30-12:15 CT. Observed
+      13,500.0 s. Only the CME archive-unavailability correspondence covers
+      this date. Consecutive with 2025-07-04.
+  - date: '2025-07-04'
+    research_eligible: false
+    reason_code: PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE
+    evidence_state_at_policy_time: PENDING_EVIDENCE
+    note: >-
+      Independence Day 2025 (Friday); RTH 08:30-12:00 CT close. Observed
+      12,599.9 s. Consecutive with 2025-07-03; the next eligible session is
+      2025-07-07, at which rolling state must reset.

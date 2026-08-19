@@ -197,7 +197,12 @@ def _run_audit(part: str, chunk_rows: int) -> int:
         print(f"[closeout] mbo-blocks: {blocks['status']} "
               f"({blocks['n_sessions_final']} sessions, {blocks['n_blocks']} blocks) "
               f"-> {p}", flush=True)
-        prop = propose_partitions(blocks)
+        # Bind the EXACT bytes of the MBO-block artifact just written, so the
+        # proposal's structural binding cannot refer to a stale artifact.
+        import hashlib as _hashlib
+
+        blocks_sha = _hashlib.sha256(p.read_bytes()).hexdigest()
+        prop = propose_partitions(blocks, mbo_blocks_artifact_sha256=blocks_sha)
         p = write_artifact(prop, out_dir, "partition_proposal", paths.ROOT)
         statuses["partition-proposal"] = prop["status"]
         print(f"[closeout] partition-proposal: {prop['status']} -> {p}", flush=True)

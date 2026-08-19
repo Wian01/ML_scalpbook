@@ -37,7 +37,16 @@ src/nqresearch/
   calendar_evidence.py  # PA-0001 date-level calendar evidence model:
                 # committed matrix config/data/cme_calendar_evidence.yaml,
                 # tier gating, hash-verified immutable evidence files,
-                # observed cross-check vs coverage artifact (fail-closed)
+                # observed cross-check vs coverage artifact (fail-closed);
+                # plus the PA-0002 activation-resolution check, which
+                # dispositions pending dates WITHOUT altering evidence
+  eligibility.py  # PA-0002 research-eligibility quarantine mask:
+                # config/data/research_eligibility.yaml (strict schema,
+                # bound to the evidence-matrix SHA), session masking, no
+                # window may cross a quarantined session, state reset at the
+                # next eligible session, structural invariants (no boundary /
+                # MBO session / block span / roll decision source). Session
+                # IDs only — never raw paths; never consumed by rolls.py
   rolls.py      # front-contract/roll rule (volume-leading, monotone expiry)
   holdout.py    # fail-closed mechanical holdout fence (PENDING_INDEPENDENT_AUDIT)
   research.py   # THE research-loading API: mandatory date range + fence first

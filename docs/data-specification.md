@@ -580,6 +580,68 @@ approval of those exact hashes. With 10 dates pending, the effective
 calendar, MBO blocks and partitions remain
 PROVISIONAL_DOCUMENT_VERIFICATION_PENDING and `activation_ready=false`.
 
+## 6d. Research-eligibility quarantine (2026-08-19; protocol amendment PA-0002)
+
+**Ten calendar dates are PROPOSED for research quarantine** — 2024-09-02,
+2024-11-29, 2025-01-01, 2025-01-20, 2025-02-17, 2025-04-18, 2025-05-26,
+2025-06-19, 2025-07-03, 2025-07-04 — i.e. exactly the §6c
+`PENDING_EVIDENCE` set. **Their calendar-evidence states are UNCHANGED and
+remain `PENDING_EVIDENCE`**: quarantine is a research-policy disposition,
+never a claim that the calendar was verified, and the effective calendar
+stays explicitly provisional.
+
+**Only eight observed DEV sessions are lost.** 2025-01-01 is not a CME
+trading day (no session exists) and 2025-04-18 closes 08:15 CT before the
+08:30 RTH open and additionally has no usable vendor records — neither could
+produce an RTH sample under any decision. Observed DEV sessions therefore go
+**317 → 309 eligible**, out of 318 DEV trading days.
+
+**Basis:** canonical §50's allowed *"predefined holiday/partial-session
+rule"* exclusion, with the machine-readable reason code
+`PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE`, defined in advance of any
+feature, label, model or result. **Rationale:** with no obtainable official
+schedule, the observed data agrees only with *our own* calendar; a baseline
+error would propagate self-consistently through session assignment, RTH
+windowing, labels and evaluation and never surface. Quarantine costs 2.5% of
+DEV and leaves PA-0001's evidence threshold intact rather than opening it
+with an exception.
+
+**What is retained:** raw data is untouched and immutable; the dates remain
+in the effective calendar and in coverage accounting (**516 expected
+sessions unchanged** — eligibility is a separate mask, never a deletion);
+normalization and QA may still process them for session reconstruction.
+**What is forbidden:** research input, and any feature window, label
+horizon, sample window or evaluation window that touches or crosses them;
+rolling state must reset at the next eligible session (for the consecutive
+2025-07-03/04 pair that is **2025-07-07**).
+
+**Nothing structural changes.** No quarantined date is a partition boundary,
+an MBO session, inside any MBO block span, or a causal-roll
+`decided_from_session`. Partition ranges stay contiguous (DEV 318 /
+SELECTION 100 / HOLDOUT 98 trading days), the **MBO inventory stays 77
+sessions in 30 blocks with zero spanning blocks — no MBO block is
+quarantined** — and the **eight causal roll switches are unchanged**;
+2025-06-19 remains recorded as roll-week adjacent in the data-level series,
+which never consumes the eligibility mask. HOLDOUT is untouched and sealed.
+
+Machinery: `config/data/research_eligibility.yaml` (strict schema, bound to
+the evidence-matrix SHA-256) enforced by `nqresearch/eligibility.py`; the
+activation disposition is computed by a separate check
+(`resolve_activation_disposition`) that leaves evidence states alone, always
+blocks on `CONFLICT_REQUIRES_REVIEW`, and requires the policy to cover the
+pending set exactly. **Partitions remain PROPOSED_NOT_ACTIVE with
+`activation_ready=false`**; the artifact-level calendar state under this
+disposition is the explicitly provisional
+`PROVISIONAL_PENDING_DATES_QUARANTINED`.
+
+**Preferred first Milestone 2 pilot month: October 2025** — no quarantined
+date, fully inside DEV, away from SELECTION/HOLDOUT, and containing MBO lab
+sessions useful for reconstruction validation. Note that **MBO-BLK-008 spans
+2025-10-30 → 2025-11-07** and is therefore *not* an October-only block: the
+later pilot plan must either exclude it from block-level validation or
+extend the QA-only validation window to 2025-11-07 without changing the
+defined research month.
+
 ## 7. Unresolved assumptions and open items (current, post-closeout)
 
 Current state reference: §6a/§6b/§6c and audit-log AL-0028/AL-0039.

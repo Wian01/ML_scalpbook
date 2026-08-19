@@ -169,8 +169,20 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   8 DOCUMENT_VERIFIED (2025-01-09 + all seven 2026 dates),
   8 TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, 10 PENDING_EVIDENCE,
   0 conflicts — activation still blocked.
+- **Research-eligibility quarantine PROPOSED 2026-08-19 (PA-0002; data-spec
+  §6d):** the 10 PENDING_EVIDENCE dates are research-ineligible under
+  canonical §50's predefined holiday/partial-session rule
+  (`config/data/research_eligibility.yaml`, `nqresearch/eligibility.py`).
+  Evidence states stay `PENDING_EVIDENCE` (quarantine ≠ verification); the
+  calendar stays provisional. **8 observed DEV sessions lost (317 → 309)**;
+  raw + QA/normalization retain them, research input must exclude them and
+  no window may cross them (reset at the next eligible session; the
+  2025-07-03/04 pair resets on 2025-07-07). **No MBO block affected**
+  (77/30), coverage still 516, 8 roll switches unchanged, partitions still
+  inactive.
 - Remaining open items: the 10 PENDING_EVIDENCE calendar dates (PA-0001,
-  data-spec §6c); explicit human partition activation approval;
+  data-spec §6c) and independent review of the PA-0002 quarantine;
+  explicit human partition activation approval;
   crossed-book burst 2026-08-10 11:31:58 CT pending session-phase/`status`
   classification (Milestone 2); remaining canonical §12 QA fields as a
   mandatory Milestone 2 gate; MBO acquisition reasons UNKNOWN_NOT_RECORDED.

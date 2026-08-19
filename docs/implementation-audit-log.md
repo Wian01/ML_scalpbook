@@ -2031,3 +2031,522 @@ in by the entry that creates the initial commit.
   data changed.
 - **Commit:** this entry is the audit-log-only second commit; nothing
   pushed.
+
+## AL-0047 — PA-0002 research-eligibility quarantine of the ten evidence-pending sessions (UNCOMMITTED, PENDING_INDEPENDENT_REVIEW)
+
+- **Category:** protocol-relevant decision (evidence-policy *disposition*,
+  not an evidence change) + implementation + test additions. All earlier
+  entries, AL-0038 through AL-0046, are unchanged.
+- **Decision implemented:** the ten `PENDING_EVIDENCE` dates — 2024-09-02,
+  2024-11-29, 2025-01-01, 2025-01-20, 2025-02-17, 2025-04-18, 2025-05-26,
+  2025-06-19, 2025-07-03, 2025-07-04 — are marked **research-ineligible
+  (quarantined)** under canonical §50's allowed *"predefined
+  holiday/partial-session rule"*, machine-readable reason code
+  `PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE`, defined in advance of any
+  feature, label, model or result.
+- **TRUTH PRESERVED (mandatory review refinement):** no evidence state was
+  changed or upgraded. All ten remain `PENDING_EVIDENCE` in
+  `cme_calendar_evidence.yaml`; no evidence claim, file, hash, tier or
+  hierarchy was touched; **no "quarantined" value was added to
+  `EVIDENCE_STATES`** (regression-tested); the effective calendar remains
+  explicitly PROVISIONAL and is never relabelled `DOCUMENT_VERIFIED`.
+  `cme_calendar_overrides.yaml` was deliberately left byte-unchanged — its
+  `PROVISIONAL_DOCUMENT_VERIFICATION_PENDING` summary is still the truthful
+  one, and the verifier now REQUIRES exactly that value under a quarantine
+  disposition.
+- **Rationale:** with no obtainable official schedule, the observed corpus
+  agrees only with our own baseline calendar; a baseline error would
+  propagate self-consistently through session assignment, RTH windowing,
+  labels and evaluation without ever surfacing. Quarantine costs 8 of 317
+  observed DEV sessions (2.5%) and preserves PA-0001's threshold instead of
+  opening it with an exception. Ten calendar exceptions are quarantined but
+  only **eight observed sessions** are lost: 2025-01-01 is not a CME trading
+  day, and 2025-04-18 closes 08:15 CT before the 08:30 RTH open and has no
+  usable vendor records — neither could ever have produced an RTH sample.
+- **New:** `docs/protocol-amendments/PA-0002-research-eligibility-quarantine.md`;
+  `config/data/research_eligibility.yaml` (strict schema, extra fields
+  forbidden, unique + ascending dates, every entry
+  `research_eligible: false`, bound to evidence-matrix SHA-256
+  `89cc29fd…a8570aad`, with non-negotiable semantics: research use and all
+  window crossing FORBIDDEN, state reset mandatory, causal roll series must
+  NOT consume the mask, zero MBO blocks quarantined, HOLDOUT sealed);
+  `src/nqresearch/eligibility.py` (fail-closed loading/validation, session
+  masking, `eligible_sessions_in_range`, `assert_window_session_local`,
+  `next_eligible_session`, `requires_state_reset`,
+  `verify_structural_quarantine_invariants`; session IDs only, never raw
+  paths, no override/allow-quarantined parameter);
+  `tests/unit/test_eligibility.py`.
+- **Changed:** `calendar_evidence.py` — added
+  `resolve_activation_disposition()` plus `conflict_dates()`/`pending_dates()`
+  and the states `DISPOSITION_EVIDENCE_COMPLETE`,
+  `DISPOSITION_PENDING_DATES_QUARANTINED`,
+  `CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED`. Semantics: verified and
+  triangulated remain evidence-complete; **`CONFLICT_REQUIRES_REVIEW` always
+  blocks and can never be resolved by quarantine**; a pending date may be
+  dispositioned only if it appears exactly in the bound policy and every
+  pending date must be covered — extra, missing or substituted dates fail
+  closed, so a verified/triangulated date can never be silently quarantined.
+  `holdout.py` — `ActivePartitions` gains mandatory
+  `research_eligibility_sha256`; activation now resolves the disposition,
+  verifies the policy binds the committed matrix, runs the structural
+  invariants, requires the bound policy hash, requires the overrides summary
+  and the proposal `calendar_verification_state` to match the disposition
+  exactly, and requires the approval audit entry to cite the policy hash as
+  well. `config.py` — `research_eligibility.yaml` file hash added to
+  `effective_config_hash()` (it determines which sessions any derived
+  dataset may contain, so it is research-reproducibility identity), with the
+  docstring updated to enumerate inputs accurately. `research.py` — `_gate`
+  additionally validates the policy; new gated
+  `research_eligible_sessions()` filters quarantined sessions so a broad DEV
+  request still works; M2 contract records the mask requirement.
+  `qa/closeout.py` — activation conditions reworded for PA-0001+PA-0002.
+- **Structural invariants proven mechanically against the real artifacts
+  (all fail-closed regression-tested):** every quarantined date lies in DEV;
+  none is in SELECTION or HOLDOUT; none is a partition boundary; **none is
+  an MBO session; none lies inside any MBO block span** (earliest block
+  starts 2025-08-18, after every quarantined date); none is a causal-roll
+  `decided_from_session`. Real-corpus invariants confirmed unchanged:
+  partition trading days DEV 318 / SELECTION 100 / HOLDOUT 98; observed DEV
+  sessions 317 before quarantine and **309 eligible after**; coverage **516
+  expected sessions**; MBO **77 sessions in 30 blocks**; **zero** spanning
+  blocks; **eight** causal switches. 2025-06-19 remains recorded
+  `roll_week=true` in the data-level series while excluded from research
+  sampling; `rolls.py` is regression-tested to never reference eligibility.
+- **Window/state rules enforced:** no research sample for a quarantined
+  session; no feature, label, sample or evaluation window may span more than
+  one session (so none can cross a quarantined session or an early close);
+  rolling state must reset at the next eligible session — verified for every
+  successor, including the consecutive 2025-07-03/2025-07-04 pair whose next
+  eligible session is **2025-07-07**. Adjacent eligible sessions are NOT
+  excluded, because the CME trading day begins at 17:00 CT the prior
+  calendar day and all V1 horizons (≤15 min + δ) are session-local; the
+  policy records that any future pre-registered feature using prior-session
+  state requires an explicit policy review and may not silently consume the
+  successor session.
+- **Provenance consequence (expected and honest):** adding
+  `research_eligibility.yaml` to the effective config hash, plus the
+  `config.py`/`sources.py`-adjacent code edits, moves both the config hash
+  and the acquisition-code hash, so `require_provenance()` refuses again
+  until the next separately reviewed commit-and-restamp sequence. The eight
+  acquisition artifacts and the four historical `qa/m0_closeout/` artifacts
+  were NOT regenerated in this phase.
+- **Pilot recommendation recorded (not activated, nothing normalized):**
+  **October 2025** is the preferred initial one-month Milestone 2 pilot — no
+  quarantined date, fully inside DEV, away from SELECTION/HOLDOUT, with MBO
+  lab sessions available for reconstruction validation. **MBO-BLK-008 spans
+  2025-10-30 → 2025-11-07** and is therefore not an October-only block: the
+  pilot plan must either exclude it from block-level validation or extend
+  the QA-only validation window to 2025-11-07 without changing the defined
+  research month.
+- **Verification:** full suite **528/528 pass** (was 462); `git diff --check`
+  clean. No real artifact regenerated; no raw vendor data, evidence file or
+  QA artifact changed; **no `partitions_active.yaml`**; proposal remains
+  `PROPOSED_NOT_ACTIVE` with `activation_ready=false`; no HOLDOUT/FORWARD
+  access; no normalization, feature, label or model work.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0048 — Independent-review remediation of PA-0002: reset semantics, strict policy schema/lifecycle, session-ID validation, validated-policy path, both-branch activation coherence, structural-artifact binding (supersedes parts of AL-0047)
+
+- **Category:** review findings + implementation fixes + test additions.
+  AL-0047 and all earlier entries are unchanged; the corrections below
+  supersede specific AL-0047 statements.
+- **CORRECTION TO AL-0047 (overstatement):** AL-0047 stated that state reset
+  was "verified for every successor". That was wrong. The reviewer
+  reproduced `requires_state_reset("2025-01-02") == False` and
+  `requires_state_reset("2025-04-21") == False`, because the implementation
+  only inspected the immediately preceding OBSERVED session and therefore
+  missed quarantined CALENDAR dates that have no observed session
+  (2025-01-01 New Year's Day; 2025-04-18 Good Friday). Reset detection now
+  additionally returns true when ANY quarantined calendar date falls
+  chronologically between the preceding observed session and the current
+  one. Regressions added: 2025-01-02 true, 2025-04-21 true, 2025-07-07 true
+  after the consecutive July pair, every observed quarantined-session
+  successor true, ordinary session false, first observed corpus session
+  true, and a coherence test asserting `next_eligible_session()` and
+  `requires_state_reset()` can never disagree for any quarantined date.
+- **Session-ID fail-open (reproduced):** `is_research_eligible("not-a-date")`
+  returned True, as did whitespace-padded strings, timestamps, ints and —
+  most dangerously — `datetime` objects, which subclass `date` and whose
+  `.isoformat()` silently missed the mask. Added ONE canonical parser
+  `parse_session_id()` used by every public entry point; it accepts only an
+  exact `datetime.date` (a `datetime` is refused) or canonical
+  `YYYY-MM-DD`, and rejects malformed/padded/non-canonical strings,
+  timestamps, ints, bools, None and arbitrary objects.
+  `assert_window_session_local()` additionally refuses canonical-but-unknown
+  sessions. Coverage-artifact session IDs are validated canonical, unique
+  and ascending before being used as the observed universe.
+- **Schema fail-open (reproduced):** the policy accepted arbitrary status,
+  id, amendment path, version 999, arbitrary QA semantics,
+  `prior_session_state_features_require_policy_review=false`,
+  `VENDOR_CORRUPT_SESSION` as a PA-0002 reason,
+  `evidence_state_at_policy_time=DOCUMENT_VERIFIED`, and numeric `0` for
+  `research_eligible`. The schema is now PA-0002-SPECIFIC: exact
+  `Literal` policy id, amendment path, QA/research/window semantics, reason
+  code `PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE` and evidence state
+  `PENDING_EVIDENCE`; `policy_version` must be a plain int exactly 1 (bool
+  and string coercion refused); `research_eligible` must be strict boolean
+  `false` (`0`, `"false"`, `None`, `[]` refused); every mandated boolean is
+  strict; policy id, canonical basis, rationale and per-date notes must be
+  non-blank.
+- **Explicit policy lifecycle added:** `PROPOSED_PENDING_INDEPENDENT_REVIEW`
+  → `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` → `APPROVED_FOR_ACTIVATION`.
+  **Activation accepts ONLY the approved state**, so a proposed or merely
+  implemented policy always blocks even against a fabricated
+  activation-ready proposal. The live policy is deliberately set to
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` and is **NOT approved** in this
+  phase. Synthetic fixtures now use real PA-0002 constants and legitimate
+  lifecycle states instead of an arbitrary `SYNTHETIC` placeholder.
+- **Validated production path:** new `load_validated_policy()` verifies the
+  strict schema at the committed fixed path, the exact evidence-matrix SHA
+  binding, matrix/policy date-set consistency (which also guarantees no
+  conflict is dispositioned) and the caller's permitted lifecycle states.
+  It is now used by calendar verification-state generation, research gating
+  (`research._gate` no longer relies on `load_policy()`), eligibility
+  enumeration and activation. `current_calendar_verification_state()` falls
+  back to the ordinary provisional/pending state when the binding is stale
+  or the policy malformed — regression-tested with a stale binding.
+- **Both-branch activation coherence:** the eligibility-policy SHA is now
+  compared in BOTH dispositions (previously only under quarantine), and the
+  proposal's `calendar_verification_state` must equal the state implied by
+  the computed disposition in BOTH branches (evidence-complete → exact
+  complete state; quarantine → exact provisional-quarantined state).
+- **Structural evidence bound by identity:** `ActivePartitions` gains
+  mandatory `coverage_artifact_sha256`, `mbo_blocks_sha256` and
+  `front_contract_series_sha256`. At activation the actual bytes are hashed
+  and compared, the artifact type/status and required internal keys are
+  validated, and this happens BEFORE any content is trusted — so a modified
+  MBO/front-series artifact can no longer make an unsafe quarantine look
+  safe. A single truth is enforced for coverage: the identity bound in the
+  active configuration must equal the identity the evidence matrix already
+  verified. The approval audit entry must now cite all seven identities.
+  `verify_structural_quarantine_invariants()` no longer merely reports the
+  artifact's own counts — it ASSERTS coverage 516, DEV/SELECTION/HOLDOUT
+  318/100/98, observed DEV 317, eligible DEV 309, excluded 8, MBO 77/30,
+  spanning 0 and 8 causal roll switches.
+- **Machine-readable closeout bindings:** `qa/closeout.py` now emits a
+  `research_eligibility_binding` block on both the MBO-block and
+  partition-proposal payloads (evidence disposition, provisional calendar
+  state, policy SHA-256 and lifecycle state, quarantined-date set and its
+  deterministic digest, 10 quarantined dates, 8 excluded observed DEV
+  sessions, 309 eligible, and the structural-quarantine facts) plus named
+  checks: `eligibility_policy_bound_to_evidence_matrix`,
+  `pending_dates_exactly_covered`, `quarantine_structurally_safe`,
+  `structural_artifact_identities_valid`,
+  `calendar_disposition_truth_preserved`. The block is fail-safe (any
+  validation failure records a FAIL check, never a silent success), and the
+  artifacts remain `PROPOSED_NOT_ACTIVE` / `activation_ready=false` /
+  explicitly provisional. **The real artifacts were NOT regenerated.**
+- **Vacuous test removed (rule 7):** the assertion ending in `or True` in
+  `tests/unit/test_eligibility.py` is deleted and replaced with executable
+  checks that public eligibility APIs return only canonical session-ID
+  strings or booleans, never `Path` objects, that no path-returning or
+  raw-file enumeration API exists, and that the research loader stays
+  fail-closed while partitions are inactive.
+- **Files changed:** `src/nqresearch/eligibility.py` (rewritten),
+  `src/nqresearch/holdout.py`, `src/nqresearch/calendar_evidence.py`,
+  `src/nqresearch/research.py`, `src/nqresearch/qa/closeout.py`,
+  `config/data/research_eligibility.yaml` (lifecycle state only — the ten
+  dates, reason codes and evidence states are unchanged),
+  `tests/unit/test_eligibility.py`, `tests/unit/test_holdout_fence.py`,
+  `tests/unit/conftest.py`. No earlier test was weakened or deleted to make
+  anything pass; two fixtures were corrected (the synthetic coverage
+  artifact now carries `status`/`n_expected_complete_sessions`, and the
+  synthetic proposal now declares the exact complete state) because the
+  new checks are stricter, and one test's expectation was updated from the
+  removed "pending blocks unconditionally" semantics to the PA-0002
+  "pending-but-unquarantined blocks" semantics.
+- **Truth preservation re-verified:** all ten evidence states remain
+  `PENDING_EVIDENCE`; `EVIDENCE_STATES` still contains no quarantine value;
+  `cme_calendar_evidence.yaml` and `cme_calendar_overrides.yaml` remain
+  byte-unchanged; the calendar state is the provisional
+  `PROVISIONAL_PENDING_DATES_QUARANTINED` and is never `DOCUMENT_VERIFIED`.
+- **Verification:** full suite **686/686 pass** (was 528); `git diff
+  --check` clean; no real artifact regenerated; no raw vendor data or
+  evidence file changed; **no `partitions_active.yaml`**; no HOLDOUT/FORWARD
+  access; no normalization, feature, label or model work.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0049 — Second-round PA-0002 remediation: pre-coercion strict types, candidate-aware closeout bindings, per-artifact/envelope acceptance, lifecycle API hardening
+
+- **Category:** review findings + implementation fixes + test additions.
+  AL-0047, AL-0048 and all earlier entries are unchanged.
+- **(1) Pydantic coercion fail-open (reproduced):** the semantics
+  after-validator inspected values Pydantic had ALREADY coerced, so
+  `rolling_state_reset_... = 1`, `prior_session_state_... = "true"`,
+  `causal_roll_series_consumes_eligibility = 0`, `holdout_sealed = "true"`
+  and `n_mbo_blocks_quarantined = "0"` were all accepted. Every semantic
+  boolean is now `StrictBool`, the block count and `policy_version` are
+  `StrictInt`, and `research_eligible` is `StrictBool` plus an identity
+  check — so numeric, string, null, float and container representations are
+  refused BEFORE coercion even when Python would equate them to the
+  mandated value. Adversarial parameterised tests cover every boolean and
+  integer field against `0, 1, "true", "false", "0", "1", None, [], {},
+  1.0, 0.0` (the legitimate value is excluded per field, and a positive
+  test proves correct strict values still parse).
+- **(2) Stale self-validation of generated output (reproduced):** a
+  synthetic one-session candidate from `freeze_mbo_blocks()` reported
+  `n_sessions_final = 1` while embedding
+  `structural_quarantine.n_mbo_sessions = 77` and claiming
+  `structural_artifact_identities_valid = PASS`, because
+  `_quarantine_binding()` read the REAL on-disk closeout artifacts instead
+  of the candidate being generated. Closeout generation is now
+  candidate-aware: `_policy_binding_core()` carries only config-level facts;
+  `_block_stage_binding()` describes the CANDIDATE blocks and hashes only
+  the source artifact that stage actually consumed; `_proposal_stage_binding()`
+  derives every structural fact from the candidate blocks passed in plus the
+  candidate partition counts being produced, never from a prior
+  `partition_proposal.json`. Full structural safety is not provable while
+  freezing blocks, so it is explicitly **DEFERRED (WARN)** at that stage
+  instead of falsely PASS, with a narrower
+  `quarantine_disjoint_from_candidate_mbo_blocks` check that IS provable
+  there. `structural_artifact_identities_valid` is PASS only when real
+  source bytes were hashed and those hashes are recorded machine-readably.
+  `propose_partitions()` gained `mbo_blocks_artifact_sha256` and the CLI now
+  hashes the just-written MBO-block artifact and passes it, so the proposal
+  binds the exact bytes it was generated against, alongside the coverage and
+  front-series identities activation later requires.
+- **(3) Per-artifact acceptance and envelope integrity:** the generic
+  PASS-or-WARN rule is replaced by per-artifact permitted statuses —
+  coverage WARN (its understood status), MBO blocks PASS, front series PASS
+  — and activation-bound artifacts must now carry a trustworthy provenance
+  envelope: `generation_git_clean` exactly boolean true, a real ancestral
+  commit SHA of the actual project repository, the current effective config
+  hash, the current package/audit code hash, correct artifact type and
+  required schema keys. **This correctly makes the historical closeout
+  artifacts activation-INELIGIBLE** until the later reviewed clean-tree
+  regeneration — asserted by a test against the real on-disk artifact.
+  Activation additionally requires the approved PROPOSAL to embed the same
+  structural identities the active configuration binds (one truth, not two).
+- **(4) Lifecycle API hardening:** the public
+  `load_validated_policy(..., allowed_states=...)` relaxation is removed.
+  The injectable core is now private (`_load_validated_policy`, test-only)
+  behind three intent-specific entry points:
+  `load_policy_for_reporting()` (any well-formed lifecycle),
+  `load_policy_for_activation()` and `load_policy_for_research()` (both
+  require exactly `APPROVED_FOR_ACTIVATION`). Signature tests prove no
+  public eligibility or research function exposes an allowed-state,
+  override, force, bypass or quarantine parameter. The live policy remains
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` and is **not** approved.
+- **(5) Validated policy in every public decision:**
+  `quarantined_sessions()`, `is_research_eligible()`,
+  `assert_session_eligible()`, `assert_window_session_local()`,
+  `next_eligible_session()`, `requires_state_reset()` and
+  `eligible_sessions_in_range()` now route through the validated path, so a
+  stale policy/matrix binding makes every one of them fail closed instead of
+  returning an eligibility answer (regression-tested for all seven). The
+  schema-only date accessor is private (`_schema_policy_dates`) and exists
+  solely to let the disposition resolver avoid recursion. Session
+  enumeration only trusts the coverage list after the matrix has verified
+  that artifact's identity.
+- **Latent bug found and fixed during this work:**
+  `current_calendar_verification_state()` still imported the renamed
+  `load_validated_policy` inside a broad `except Exception`, so the
+  resulting `ImportError` was silently swallowed into the fail-safe pending
+  state — the live calendar state degraded without any error. The import is
+  now performed OUTSIDE the try block so a renamed symbol raises loudly, and
+  the state is correct again.
+- **Tests:** full suite **853/853 pass** (was 686). Added coverage for every
+  reproduced defect plus: candidate binding never claims 77 sessions for a
+  1-session candidate; a changed candidate block list changes the binding; a
+  proposal cannot inherit structural facts from a prior on-disk proposal; a
+  proposal without the block hash marks identities FAILED; the REAL
+  candidate still yields 77 sessions / 30 blocks / 0 spanning / 8 rolls /
+  516 coverage / 317 observed / 309 eligible DEV with zero quarantine
+  violations; WARN MBO or front artifacts rejected; legacy, dirty,
+  non-ancestor, stale-config and stale-code envelopes rejected; missing or
+  mismatched embedded-vs-active structural hashes rejected. Three fixtures
+  were corrected (clean envelopes and permitted statuses on synthetic
+  artifacts, the proposal fixture embedding structural identities, and a
+  missing tmp subdirectory); no existing test was weakened or deleted to
+  make anything pass.
+- **Truth preservation re-verified:** the ten evidence states remain
+  `PENDING_EVIDENCE`; `EVIDENCE_STATES` has no quarantine value; the
+  evidence matrix and calendar overrides remain byte-unchanged; the calendar
+  state is the provisional `PROVISIONAL_PENDING_DATES_QUARANTINED`.
+- **Files changed:** `src/nqresearch/eligibility.py`,
+  `src/nqresearch/holdout.py`, `src/nqresearch/calendar_evidence.py`,
+  `src/nqresearch/research.py`, `src/nqresearch/qa/closeout.py`,
+  `src/nqresearch/cli.py`, `tests/unit/test_eligibility.py`,
+  `tests/unit/test_holdout_fence.py`, `tests/unit/test_closeout.py`,
+  `tests/unit/conftest.py`. No config file content changed in this round.
+- **Verification:** `git diff --check` clean; no real artifact regenerated;
+  no raw vendor data or evidence file changed; **no `partitions_active.yaml`**;
+  no HOLDOUT/FORWARD access; no normalization, feature, label or model work.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0050 — Third-round PA-0002 remediation: binding failures propagate to artifact status, substantive identity/input validation, proposal-envelope verification, restricted coverage WARN
+
+- **Category:** review findings + implementation fixes + test additions.
+  AL-0047, AL-0048, AL-0049 and all earlier entries are unchanged.
+- **(1) Fail-open artifact status (reproduced):** a candidate containing
+  quarantined date 2024-09-02 as an MBO session produced
+  `quarantine_disjoint_from_candidate_mbo_blocks = FAIL` (block stage) and
+  `quarantine_structurally_safe = FAIL` with explicit violations (proposal
+  stage), yet BOTH artifacts reported top-level `status = PASS`, because the
+  verdict was computed only from the three original structural checks and
+  ignored `research_eligibility_binding.checks`. Fixed: the top-level status
+  of `mbo_blocks_frozen` and `partition_proposal` now incorporates the
+  binding verdict, so an artifact can never present PASS while an embedded
+  mandatory safety or identity check says FAIL. The block-stage
+  `quarantine_structurally_safe = WARN (DEFERRED)` remains deliberately
+  non-blocking by itself — full proof genuinely requires partition ranges
+  and roll decision sources — and is excluded via an explicit non-blocking
+  list rather than by ignoring the binding. The exact three
+  partition-structure checks are preserved unchanged in `checks` because
+  activation requires that exact set.
+- **(2) Vacuous identity validation (reproduced):** `not-a-hash`, a
+  63-character value and uppercase 64-character text all yielded
+  `structural_artifact_identities_valid = PASS` with the proposal still
+  top-level PASS. Fixed: every bound identity must now be exactly 64
+  LOWERCASE hex characters (`_is_sha256_hex`), and "identities valid" no
+  longer means "a file existed and produced some hash" — the coverage and
+  front-series INPUTS are now substantively validated during proposal
+  generation via `_validate_input_artifact()`: expected artifact type,
+  required keys, permitted status semantics, clean committed-tree envelope,
+  real ancestral commit SHA, current effective config hash and current
+  package hash. Any problem FAILs the binding and therefore the artifact.
+  **Consequence, accepted and NOT weakened:** the real candidate proposal now
+  reports top-level FAIL because its historical coverage/front-series inputs
+  still carry legacy envelopes (no `generation_git_clean`, stale
+  config/code hashes). The three structural checks remain PASS and
+  `quarantine_structurally_safe` is PASS with zero violations; only the
+  input-envelope validation fails, and it will pass after the reviewed
+  post-commit clean-tree regeneration. The corresponding regression test was
+  updated to assert this precise decomposition rather than to force PASS.
+- **(3) Unverified proposal envelope (reproduced):**
+  `_verify_activation_evidence()` hashed and parsed
+  `partition_proposal.json` but never applied the clean/current envelope
+  verifier to it — that was applied only to the three structural artifacts.
+  Fixed: the proposal's own envelope is now verified immediately after the
+  artifact-type check and BEFORE any status, checks, state, readiness,
+  ranges or embedded identities are trusted. Activation regressions cover
+  missing/false/string cleanliness, malformed/nonexistent/non-commit and
+  non-ancestor SHAs, stale config hash, stale package hash, wrong artifact
+  type and a stripped legacy envelope; a further test proves a genuine clean
+  proposal generated at an implementation commit REMAINS acceptable after a
+  later audit-log-only descendant commit.
+- **(4) Restricted coverage WARN:** the activation verifier previously
+  accepted coverage status WARN generically. It now additionally requires
+  the substantive state via `_coverage_substance_problems()`: `n_fail == 0`,
+  no missing sessions, zero cross-file ordering violations, the coverage
+  checks present, `n_expected_complete_sessions == 516`, and every coverage
+  check PASS except the one specifically understood WARN,
+  `pre_rth_short_sessions_without_data` (the known 2025-04-18 pre-RTH Good
+  Friday session). Any additional, renamed, unknown or materially different
+  WARN fails closed pending review; a PASS status is accepted when the same
+  invariants hold. The live coverage artifact is verified to be in exactly
+  the understood state.
+- **Tests:** full suite **883/883 pass** (was 853). Added: quarantined date
+  as candidate MBO session cannot be top-level PASS at either stage; the
+  deferred block-stage WARN alone does not fail the artifact; malformed
+  identities (`not-a-hash`, 63/65 chars, uppercase, empty, None, int) fail
+  the artifact; a stale policy binding makes both candidates non-PASS; the
+  real 77/30 candidate remains structurally valid with the FAIL isolated to
+  legacy input envelopes; coverage substance suite (understood state clean,
+  real artifact clean, unknown/renamed WARN, nonzero FAIL, missing session,
+  ordering violation, wrong expected count, empty checks, PASS accepted);
+  nine proposal-envelope activation rejections plus the audit-only-descendant
+  acceptance. Two fixtures were extended (synthetic coverage now carries the
+  corpus-shaped substance fields; the synthetic proposal now carries a clean
+  envelope) and a missing `pytest` import was added; no existing test was
+  weakened or deleted to make anything pass.
+- **Unchanged and re-verified:** the ten evidence states remain
+  `PENDING_EVIDENCE`; `EVIDENCE_STATES` has no quarantine value; the
+  evidence matrix and calendar overrides remain byte-unchanged; calendar
+  state `PROVISIONAL_PENDING_DATES_QUARANTINED`; policy lifecycle
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`; 10 quarantined / 8 excluded /
+  309 eligible DEV; coverage 516; MBO 77/30 with zero spanning; eight causal
+  roll switches.
+- **Files changed:** `src/nqresearch/qa/closeout.py`,
+  `src/nqresearch/holdout.py`, `tests/unit/test_closeout.py`,
+  `tests/unit/test_holdout_fence.py`, `tests/unit/conftest.py`. No config
+  file content changed in this round.
+- **Verification:** `git diff --check` clean; **no real QA artifact
+  regenerated**; no raw vendor data or evidence file changed; **no
+  `partitions_active.yaml`**; no HOLDOUT/FORWARD access; no normalization,
+  feature, label or model work.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0051 — Fourth-round PA-0002 remediation: mandatory strict coverage fields, WARN bound to the machine-readable Good Friday fact, coherent PASS permitted
+
+- **Category:** review finding + implementation fix + test additions.
+  AL-0047 through AL-0050 and all earlier entries are unchanged.
+- **(1) Absent fields silently accepted (reproduced):**
+  `_coverage_substance_problems()` used `doc.get(...)` comparisons whose
+  `None` results fell through, so an artifact missing `n_fail`,
+  `missing_sessions` or `cross_file_order_violations` entirely produced ZERO
+  problems. Fixed: those fields — plus `n_expected_complete_sessions`,
+  `missing_pre_rth_short_sessions` and `checks` — are now MANDATORY and
+  strictly typed. Integer fields must be plain non-boolean ints of the exact
+  expected value (`516`, `0`, `0`), so `True`, `False`, `"0"`, `"516"`,
+  `1.0`, `[]` and `{}` are all refused; `missing_sessions` must be exactly
+  an empty list; `missing_pre_rth_short_sessions` must be a list of date
+  strings; `checks` must be a non-empty list of well-formed entries with
+  string names, valid statuses and no duplicate names. Missing keys, nulls
+  and wrong container types fail closed.
+- **(2) Understood WARN was name-only (reproduced):** a warning whose check
+  name happened to be `pre_rth_short_sessions_without_data` was accepted
+  even when the artifact's own machine-readable field pointed at
+  `2099-12-31`, because only the name and status were validated. Fixed: the
+  single understood WARN now additionally requires
+  `missing_pre_rth_short_sessions == ["2025-04-18"]` — the actual Good
+  Friday fact — and remains conditional on exactly one non-PASS check, zero
+  missing expected sessions, zero FAIL sessions and zero ordering
+  violations. An unknown or additional date, a renamed or duplicated
+  warning, an extra WARN, or a conflicting top-level field all fail closed.
+  The rule reads the machine-readable date field rather than free-form
+  detail text.
+- **(3) Coherent PASS was impossible (reproduced):** `_STRUCTURAL_ARTIFACTS`
+  permitted only top-level coverage status `WARN`, contradicting the
+  intended rule that a substantively valid PASS is acceptable. Coverage now
+  permits `PASS` or `WARN`, with coherence enforced centrally:
+  **PASS** only when every check passes AND
+  `missing_pre_rth_short_sessions` is empty; **WARN** only for the exact
+  understood 2025-04-18 condition. Any other PASS/WARN combination — a
+  top-level PASS while the Good Friday warning is still present, a
+  top-level WARN with every check passing, or a WARN whose missing-session
+  list is not exactly `["2025-04-18"]` — fails closed. The activation
+  verifier (`_STRUCTURAL_ARTIFACTS` + `_verify_structural_artifacts`) and
+  the generation-time input validator (`_validate_input_artifact` via
+  `PERMITTED_COVERAGE_STATUSES`) now share this one acceptance rule.
+- **Live artifact re-verified:** the historical coverage artifact still
+  matches the understood condition exactly — status WARN, 516 expected,
+  `n_fail=0`, no missing sessions, zero ordering violations, the single
+  `pre_rth_short_sessions_without_data` WARN, and
+  `missing_pre_rth_short_sessions == ["2025-04-18"]` — so
+  `_coverage_substance_problems()` returns no problems for it.
+- **Tests:** full suite **938/938 pass** (was 883). Added refusals for each
+  mandatory field missing separately, each field null, boolean/string/float
+  values in every integer field, wrong container types for both list
+  fields, duplicate check names, five malformed check-entry shapes, the
+  understood warning name attached to 2099-12-31, an additional pending
+  date, an additional WARN, a renamed WARN, top-level PASS with the Good
+  Friday warning present, all-PASS checks with a non-empty missing-session
+  field, top-level WARN with every check PASS, and WARN without exactly
+  `["2025-04-18"]`; plus acceptance of the exact live understood WARN state
+  and of a coherent synthetic PASS state. At activation: an incoherent
+  coverage PASS is rejected, a coherent coverage PASS is accepted, and four
+  unsound coverage mutations are rejected. All round-4 adversarial tests
+  remain; the earlier `test_material_deviations_fail` needles were retargeted
+  to the improved messages, and one test was renamed from
+  "warn_only" to "incoherent PASS rejected" because PASS is now legitimately
+  permitted when coherent. No test was weakened or deleted to make anything
+  pass.
+- **Unchanged and re-verified:** the ten evidence states remain
+  `PENDING_EVIDENCE`; `EVIDENCE_STATES` has no quarantine value; the
+  evidence matrix, calendar overrides and every other `config/data/` file
+  remain byte-unchanged; calendar state
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`; policy lifecycle
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`; 10 quarantined / 8 excluded /
+  309 eligible DEV; coverage 516; MBO 77/30 with zero spanning; eight causal
+  roll switches. The real proposal candidate remains top-level FAIL solely
+  because its historical inputs still carry legacy envelopes — resolved by
+  the reviewed clean-tree regeneration, not by weakening the check.
+- **Files changed:** `src/nqresearch/qa/closeout.py`,
+  `src/nqresearch/holdout.py`, `tests/unit/test_closeout.py`,
+  `tests/unit/test_holdout_fence.py`, `tests/unit/conftest.py`.
+- **Verification:** `git diff --check` clean; **no real QA artifact
+  regenerated**; no raw vendor data, evidence file or calendar/config file
+  changed; **no `partitions_active.yaml`**; no HOLDOUT/FORWARD access; no
+  normalization, feature, label or model work.
+- **Commit:** none (stop-for-review rule); nothing pushed.

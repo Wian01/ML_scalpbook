@@ -31,6 +31,10 @@ SYNTH = {
     "effective_calendar_sha256": "b" * 64,
     "evidence_matrix_sha256": "e" * 64,
     "cme_correspondence_sha256": "f" * 64,
+    "research_eligibility_sha256": "d" * 64,
+    "coverage_artifact_sha256": "1" * 64,
+    "mbo_blocks_sha256": "2" * 64,
+    "front_contract_series_sha256": "3" * 64,
     "dev": {"start": "2099-01-05", "end": "2099-03-31"},
     "selection": {"start": "2099-04-01", "end": "2099-05-29"},
     "holdout": {"start": "2099-06-01", "end": "2099-08-31"},
@@ -90,6 +94,10 @@ class TestFailClosed:
         {"effective_calendar_sha256": ""},
         {"evidence_matrix_sha256": "nothex"},           # PA-0001 binding
         {"cme_correspondence_sha256": ""},              # PA-0001 binding
+        {"research_eligibility_sha256": "nothex"},      # PA-0002 binding
+        {"coverage_artifact_sha256": "nothex"},         # structural binding
+        {"mbo_blocks_sha256": ""},                      # structural binding
+        {"front_contract_series_sha256": "zz"},         # structural binding
         {"holdout": {"start": "2099-03-01", "end": "2099-03-15"}},  # non-chrono
         {"dev": {"start": "2099-03-31", "end": "2099-01-05"}},      # inverted
         {"unexpected_extra": True},                                  # extra field
@@ -204,7 +212,8 @@ MANDATORY = ["boundaries_on_trading_days", "partition_ranges_contiguous",
 
 class TestActivationEvidence:
     def _synthetic_repo(self, tmp_path, overrides_status=None, groups=None,
-                        matrix_doc=None, data_root=None, jan9_ref=None):
+                        matrix_doc=None, data_root=None, jan9_ref=None,
+                        policy_dates=None, policy_doc=None):
         """Synthetic repo root: real calendar baseline + a synthetic
         date-level evidence matrix (PA-0001) + coherent overrides."""
         import shutil
@@ -231,7 +240,15 @@ class TestActivationEvidence:
                 data_root / "reference" / "cme_calendar")
         # coverage first: it binds the artifact SHA into the matrix doc
         fx.write_coverage_for(data_root, matrix_doc)
-        fx.write_matrix(root, matrix_doc)
+        fx.write_structural_artifacts(data_root)
+        matrix_sha = fx.write_matrix(root, matrix_doc)
+        # PA-0002 policy must cover exactly the PENDING dates of this matrix
+        pending = sorted(d["date"] for d in matrix_doc["dates"]
+                         if d["state"] == "PENDING_EVIDENCE")
+        fx.write_eligibility_policy(
+            root, matrix_sha,
+            pending if policy_dates is None else policy_dates,
+            doc=policy_doc)
         if groups is None:
             groups = fx.overrides_groups_for(matrix_doc,
                                              EXPECTED_BASELINE_GROUPS)
@@ -253,7 +270,9 @@ class TestActivationEvidence:
     def _evidence_env(self, tmp_path, proposal_doc, declared_sha=None,
                       overrides_status=None, groups=None, matrix_doc=None,
                       audit_entry=True, audit_omit=(), jan9_ref=None,
-                      wrong_matrix_sha=False, wrong_email_sha=False):
+                      wrong_matrix_sha=False, wrong_email_sha=False,
+                      policy_dates=None, policy_doc=None,
+                      wrong_policy_sha=False, wrong_blocks_sha=False):
         import hashlib
         import json as _json
 
@@ -262,9 +281,31 @@ class TestActivationEvidence:
 
         repo_root, data_root = self._synthetic_repo(
             tmp_path, overrides_status=overrides_status, groups=groups,
-            matrix_doc=matrix_doc, jan9_ref=jan9_ref)
-        (data_root / "qa" / "m0_closeout").mkdir(parents=True, exist_ok=True)
-        ppath = data_root / "qa" / "m0_closeout" / "partition_proposal.json"
+            matrix_doc=matrix_doc, jan9_ref=jan9_ref,
+            policy_dates=policy_dates, policy_doc=policy_doc)
+        close_dir = data_root / "qa" / "m0_closeout"
+        close_dir.mkdir(parents=True, exist_ok=True)
+        # The proposal must embed the SAME structural identities the active
+        # configuration binds (one truth, not two).
+        # the proposal itself must carry a clean CURRENT provenance envelope
+        import conftest as _fx
+
+        proposal_doc = {**_fx.clean_envelope(), **proposal_doc}
+        if "research_eligibility_binding" not in proposal_doc:
+            proposal_doc["research_eligibility_binding"] = {
+                "structural_artifact_sha256": {
+                "coverage_artifact_sha256": hashlib.sha256(
+                    (close_dir / "mbp1_full_history_coverage.json")
+                    .read_bytes()).hexdigest(),
+                "mbo_blocks_sha256": hashlib.sha256(
+                    (close_dir / "mbo_blocks_frozen.json").read_bytes()
+                ).hexdigest(),
+                "front_contract_series_sha256": hashlib.sha256(
+                    (close_dir / "mbp1_front_contract_series.json")
+                    .read_bytes()).hexdigest(),
+                }
+            }
+        ppath = close_dir / "partition_proposal.json"
         ppath.write_text(_json.dumps(proposal_doc))
         actual_sha = hashlib.sha256(ppath.read_bytes()).hexdigest()
         declared = declared_sha or actual_sha
@@ -272,11 +313,25 @@ class TestActivationEvidence:
         email_sha = hashlib.sha256(
             (data_root / "reference" / "cme_calendar" / "email.eml")
             .read_bytes()).hexdigest()
+        policy_sha = hashlib.sha256(
+            (repo_root / "config" / "data" / "research_eligibility.yaml")
+            .read_bytes()).hexdigest()
+        close = data_root / "qa" / "m0_closeout"
+        cov_sha = hashlib.sha256(
+            (close / "mbp1_full_history_coverage.json").read_bytes()
+        ).hexdigest()
+        blocks_sha = hashlib.sha256(
+            (close / "mbo_blocks_frozen.json").read_bytes()).hexdigest()
+        front_sha = hashlib.sha256(
+            (close / "mbp1_front_contract_series.json").read_bytes()
+        ).hexdigest()
         # Immutable human-approval evidence: the audit-log entry named by the
         # approval_reference must cite the exact proposal, evidence-matrix
         # and CME-correspondence hashes (PA-0001).
         cited = {"proposal": declared, "matrix": matrix_sha,
-                 "email": email_sha}
+                 "email": email_sha, "policy": policy_sha,
+                 "coverage": cov_sha, "blocks": blocks_sha,
+                 "front": front_sha}
         for omit in audit_omit:
             cited.pop(omit)
         log = repo_root / "docs" / "implementation-audit-log.md"
@@ -295,17 +350,28 @@ class TestActivationEvidence:
                "evidence_matrix_sha256": ("1" * 64 if wrong_matrix_sha
                                           else matrix_sha),
                "cme_correspondence_sha256": ("2" * 64 if wrong_email_sha
-                                             else email_sha)}
+                                             else email_sha),
+               "research_eligibility_sha256": ("3" * 64 if wrong_policy_sha
+                                               else policy_sha),
+               "coverage_artifact_sha256": cov_sha,
+               "mbo_blocks_sha256": ("4" * 64 if wrong_blocks_sha
+                                     else blocks_sha),
+               "front_contract_series_sha256": front_sha}
         parts = _parts(doc, tmp_path)
         return parts, repo_root, data_root
 
     def _proposal(self, **over):
+        from nqresearch.calendar_evidence import (
+            CALENDAR_EVIDENCE_COMPLETE_STATE,
+        )
+
         doc = {
             "artifact": "partition_proposal",
             "status": "PASS",
             "state": "APPROVED_FOR_ACTIVATION",
             "activation_ready": True,
-            "calendar_verification_state": "DOCUMENT_VERIFIED",
+            # must equal the state implied by the disposition (both branches)
+            "calendar_verification_state": CALENDAR_EVIDENCE_COMPLETE_STATE,
             "checks": [{"check": c, "status": "PASS"} for c in MANDATORY],
             "proposal": {
                 "DEV": {"start": "2099-01-05", "end": "2099-03-31"},
@@ -498,8 +564,9 @@ class TestActivationEvidence:
         with pytest.raises(PartitionsNotActiveError, match="rolls up"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
-    def test_pending_date_blocks_activation(self, tmp_path):
-        # Partial evidence stays pending: a single unresolved date blocks.
+    def test_pending_but_unquarantined_date_blocks_activation(self, tmp_path):
+        # PA-0002: a pending date blocks unless it is covered EXACTLY by the
+        # reviewed quarantine policy. Here the policy covers nothing.
         import conftest as fx
         from nqresearch.calendar_evidence import STATE_PENDING
         from nqresearch.holdout import _verify_activation_evidence
@@ -508,9 +575,41 @@ class TestActivationEvidence:
             tmp_path / "dataroot" / "reference" / "cme_calendar",
             date_states={"2025-06-19": STATE_PENDING})
         parts, repo_root, data_root = self._evidence_env(
-            tmp_path, self._proposal(), matrix_doc=matrix_doc
+            tmp_path, self._proposal(), matrix_doc=matrix_doc,
+            policy_dates=[]
         )
-        with pytest.raises(PartitionsNotActiveError, match="incomplete"):
+        with pytest.raises(PartitionsNotActiveError,
+                           match="does not exactly cover"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_verified_date_cannot_be_silently_quarantined(self, tmp_path):
+        # A policy naming a DOCUMENT_VERIFIED date (nothing pending) fails.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), policy_dates=["2026-01-19"]
+        )
+        with pytest.raises(PartitionsNotActiveError,
+                           match="never silently quarantined"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_conflict_cannot_be_resolved_by_quarantine(self, tmp_path):
+        import conftest as fx
+        from nqresearch.calendar_evidence import STATE_CONFLICT
+        from nqresearch.holdout import _verify_activation_evidence
+
+        matrix_doc, _ = fx.synthetic_matrix_doc(
+            tmp_path / "dataroot" / "reference" / "cme_calendar")
+        for d in matrix_doc["dates"]:
+            if d["date"] == "2025-06-19":
+                d["state"] = STATE_CONFLICT
+                d["agreement"] = "DISCREPANCY"
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), matrix_doc=matrix_doc,
+            policy_dates=["2025-06-19"]
+        )
+        with pytest.raises(PartitionsNotActiveError,
+                           match="NEVER be resolved by quarantine"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
     def test_wrong_matrix_hash_fails(self, tmp_path):
@@ -533,7 +632,8 @@ class TestActivationEvidence:
                            match="correspondence"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
-    @pytest.mark.parametrize("omit", [("matrix",), ("email",),
+    @pytest.mark.parametrize("omit", [("matrix",), ("email",), ("policy",),
+                                      ("coverage",), ("blocks",), ("front",),
                                       ("matrix", "email")])
     def test_audit_entry_missing_evidence_hashes_fails(self, tmp_path, omit):
         # Human approval must bind the EXACT evidence hashes, not just the
@@ -569,6 +669,382 @@ class TestActivationEvidence:
          / "mbp1_full_history_coverage.json").unlink()
         with pytest.raises(PartitionsNotActiveError,
                            match="coverage artifact missing"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    @pytest.mark.parametrize("state", [
+        "PROPOSED_PENDING_INDEPENDENT_REVIEW",
+        "IMPLEMENTED_PENDING_ACTIVATION_APPROVAL",
+    ])
+    def test_unapproved_policy_lifecycle_blocks_activation(self, tmp_path,
+                                                           state):
+        # Only APPROVED_FOR_ACTIVATION may ever activate — even with an
+        # otherwise activation-ready proposal.
+        import conftest as fx
+        from nqresearch.holdout import _verify_activation_evidence
+
+        matrix_doc, _ = fx.synthetic_matrix_doc(
+            tmp_path / "dataroot" / "reference" / "cme_calendar")
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), matrix_doc=matrix_doc,
+            policy_doc=fx.eligibility_policy_doc("0" * 64, [], status=state),
+        )
+        with pytest.raises(PartitionsNotActiveError):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_policy_hash_mismatch_fails_in_evidence_complete_branch(
+            self, tmp_path):
+        # The policy hash is bound in BOTH dispositions, not only quarantine.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), wrong_policy_sha=True
+        )
+        with pytest.raises(PartitionsNotActiveError,
+                           match="research-eligibility"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_proposal_state_mismatch_fails_in_evidence_complete_branch(
+            self, tmp_path):
+        # An evidence-complete disposition may not hide behind a provisional
+        # label either.
+        from nqresearch.calendar_evidence import (
+            CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED,
+        )
+        from nqresearch.holdout import _verify_activation_evidence
+
+        doc = self._proposal(
+            calendar_verification_state=CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED
+        )
+        parts, repo_root, data_root = self._evidence_env(tmp_path, doc)
+        with pytest.raises(PartitionsNotActiveError,
+                           match="does not match the actual disposition"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_tampered_structural_artifact_fails_by_hash(self, tmp_path):
+        import json
+
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        p = data_root / "qa" / "m0_closeout" / "mbo_blocks_frozen.json"
+        doc = json.loads(p.read_text())
+        doc["blocks"] = []          # a session silently removed
+        doc["n_blocks"] = 0
+        p.write_text(json.dumps(doc))
+        with pytest.raises(PartitionsNotActiveError,
+                           match="identity mismatch"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_declared_structural_hash_mismatch_fails(self, tmp_path):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), wrong_blocks_sha=True)
+        with pytest.raises(PartitionsNotActiveError,
+                           match="identity mismatch"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_missing_structural_artifact_fails(self, tmp_path):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        (data_root / "qa" / "m0_closeout"
+         / "mbp1_front_contract_series.json").unlink()
+        with pytest.raises(PartitionsNotActiveError,
+                           match="structural artifact missing"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_wrong_artifact_type_fails(self, tmp_path):
+        import json
+
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        # Substitute a different artifact whose declared hash we also update,
+        # proving the TYPE check is independent of the hash check.
+        p = data_root / "qa" / "m0_closeout" / "mbo_blocks_frozen.json"
+        p.write_text(json.dumps({"artifact": "something_else",
+                                 "status": "PASS", "blocks": [],
+                                 "n_blocks": 0}))
+        import hashlib as _h
+        parts = parts.model_copy(update={
+            "mbo_blocks_sha256": _h.sha256(p.read_bytes()).hexdigest()})
+        with pytest.raises(PartitionsNotActiveError, match="declares artifact"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def _mutate_artifact(self, data_root, fname, **fields):
+        """Rewrite an artifact and re-declare its hash, so the failure is
+        proven to come from content, never a stale hash."""
+        import hashlib as _h
+        import json as _j
+
+        p = data_root / "qa" / "m0_closeout" / fname
+        doc = _j.loads(p.read_text())
+        doc.update(fields)
+        p.write_text(_j.dumps(doc))
+        return _h.sha256(p.read_bytes()).hexdigest()
+
+    @pytest.mark.parametrize("fname,attr", [
+        ("mbo_blocks_frozen.json", "mbo_blocks_sha256"),
+        ("mbp1_front_contract_series.json", "front_contract_series_sha256"),
+    ])
+    def test_warn_status_rejected_for_pass_only_artifacts(self, tmp_path,
+                                                          fname, attr):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        sha = self._mutate_artifact(data_root, fname, status="WARN")
+        parts = parts.model_copy(update={attr: sha})
+        with pytest.raises(PartitionsNotActiveError,
+                           match="permitted statuses"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_coverage_content_change_trips_matrix_identity_first(self,
+                                                                 tmp_path):
+        # Coverage is DOUBLY bound (evidence matrix + active configuration),
+        # so any content change is caught by the matrix identity check before
+        # the per-artifact status rule is even reached.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        sha = self._mutate_artifact(data_root,
+                                    "mbp1_full_history_coverage.json",
+                                    status="PASS")
+        parts = parts.model_copy(update={"coverage_artifact_sha256": sha})
+        with pytest.raises(PartitionsNotActiveError,
+                           match="identity mismatch"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def _structural_env(self, tmp_path, parts, data_root, sha):
+        """Stub matrix + proposal that agree with a mutated coverage hash, so
+        the coverage ACCEPTANCE rule is what fires rather than an earlier
+        identity check."""
+        import types
+
+        parts = parts.model_copy(update={"coverage_artifact_sha256": sha})
+        stub_matrix = types.SimpleNamespace(
+            meta={"observed_reference": {"artifact_sha256": sha}})
+        proposal = {"research_eligibility_binding": {
+            "structural_artifact_sha256": {
+                "coverage_artifact_sha256": sha,
+                "mbo_blocks_sha256": parts.mbo_blocks_sha256,
+                "front_contract_series_sha256":
+                    parts.front_contract_series_sha256}}}
+        return parts, stub_matrix, proposal
+
+    def test_incoherent_coverage_pass_rejected(self, tmp_path):
+        # PASS is a PERMITTED coverage status, but only when coherent: here
+        # the understood WARN check is still present, so it must fail.
+        from nqresearch.holdout import _verify_structural_artifacts
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        sha = self._mutate_artifact(data_root,
+                                    "mbp1_full_history_coverage.json",
+                                    status="PASS")
+        parts, matrix, proposal = self._structural_env(tmp_path, parts,
+                                                       data_root, sha)
+        with pytest.raises(PartitionsNotActiveError,
+                           match="not in the understood state"):
+            _verify_structural_artifacts(parts, matrix, data_root, repo_root,
+                                         proposal)
+
+    def test_coherent_coverage_pass_accepted(self, tmp_path):
+        # A substantively coherent all-PASS coverage artifact IS acceptable.
+        from nqresearch.holdout import _verify_structural_artifacts
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        p = data_root / "qa" / "m0_closeout" / "mbp1_full_history_coverage.json"
+        import hashlib as _h
+        import json as _j
+        doc = _j.loads(p.read_text())
+        doc["status"] = "PASS"
+        doc["missing_pre_rth_short_sessions"] = []
+        doc["checks"] = [c for c in doc["checks"]
+                         if c["check"] != "pre_rth_short_sessions_without_data"]
+        p.write_text(_j.dumps(doc))
+        sha = _h.sha256(p.read_bytes()).hexdigest()
+        parts, matrix, proposal = self._structural_env(tmp_path, parts,
+                                                       data_root, sha)
+        _verify_structural_artifacts(parts, matrix, data_root, repo_root,
+                                     proposal)  # must not raise
+
+    @pytest.mark.parametrize("mutation", [
+        {"n_fail": 2},
+        {"missing_sessions": ["2025-05-05"]},
+        {"cross_file_order_violations": 1},
+        {"missing_pre_rth_short_sessions": ["2099-12-31"]},
+    ])
+    def test_unsound_coverage_rejected_at_activation(self, tmp_path,
+                                                     mutation):
+        from nqresearch.holdout import _verify_structural_artifacts
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        sha = self._mutate_artifact(data_root,
+                                    "mbp1_full_history_coverage.json",
+                                    **mutation)
+        parts, matrix, proposal = self._structural_env(tmp_path, parts,
+                                                       data_root, sha)
+        with pytest.raises(PartitionsNotActiveError,
+                           match="not in the understood state"):
+            _verify_structural_artifacts(parts, matrix, data_root, repo_root,
+                                         proposal)
+
+    @pytest.mark.parametrize("mutation,match", [
+        ({"generation_git_clean": None}, "generation_git_clean"),
+        ({"generation_git_clean": False}, "generation_git_clean"),
+        ({"generation_git_clean": "true"}, "generation_git_clean"),
+        ({"git_sha": None}, "git_sha"),
+        ({"git_sha": "b" * 40}, "commit object"),
+        ({"config_hash": "0" * 64}, "different effective configuration"),
+        ({"audit_code_hash": "0" * 64}, "different package code"),
+    ])
+    def test_envelope_integrity_required_for_activation(self, tmp_path,
+                                                        mutation, match):
+        # Legacy envelopes (no generation_git_clean), dirty generation,
+        # non-ancestor SHAs and stale config/code bindings all fail.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        sha = self._mutate_artifact(data_root, "mbo_blocks_frozen.json",
+                                    **mutation)
+        parts = parts.model_copy(update={"mbo_blocks_sha256": sha})
+        with pytest.raises(PartitionsNotActiveError, match=match):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_proposal_missing_embedded_structural_binding_fails(self,
+                                                                tmp_path):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        doc = self._proposal()
+        doc["research_eligibility_binding"] = {}  # no embedded identities
+        parts, repo_root, data_root = self._evidence_env(tmp_path, doc)
+        with pytest.raises(PartitionsNotActiveError,
+                           match="embeds no structural_artifact_sha256"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_embedded_vs_active_structural_hash_mismatch_fails(self,
+                                                               tmp_path):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        doc = self._proposal()
+        doc["research_eligibility_binding"] = {
+            "structural_artifact_sha256": {
+                "coverage_artifact_sha256": "5" * 64,
+                "mbo_blocks_sha256": "6" * 64,
+                "front_contract_series_sha256": "7" * 64,
+            }
+        }
+        parts, repo_root, data_root = self._evidence_env(tmp_path, doc)
+        with pytest.raises(PartitionsNotActiveError,
+                           match="embedded in the approved partition"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    @pytest.mark.parametrize("mutation,match", [
+        ({"generation_git_clean": None}, "generation_git_clean"),
+        ({"generation_git_clean": False}, "generation_git_clean"),
+        ({"generation_git_clean": "true"}, "generation_git_clean"),
+        ({"git_sha": None}, "git_sha"),
+        ({"git_sha": "zz"}, "git_sha"),
+        ({"git_sha": "b" * 40}, "commit object"),
+        ({"config_hash": "0" * 64}, "different effective configuration"),
+        ({"audit_code_hash": "0" * 64}, "different package code"),
+        ({"artifact": "something_else"}, "not a partition proposal"),
+    ])
+    def test_proposal_envelope_required_for_activation(self, tmp_path,
+                                                       mutation, match):
+        # The proposal itself must carry a clean CURRENT envelope before any
+        # of its status/checks/state/ranges/identities are trusted.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        doc = self._proposal()
+        doc.update(mutation)
+        parts, repo_root, data_root = self._evidence_env(tmp_path, doc)
+        with pytest.raises(PartitionsNotActiveError, match=match):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_legacy_proposal_envelope_missing_fields_rejected(self, tmp_path):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        doc = self._proposal()
+        parts, repo_root, data_root = self._evidence_env(tmp_path, doc)
+        # strip the whole envelope, as a pre-policy artifact would lack it
+        import hashlib as _h
+        import json as _j
+
+        ppath = data_root / "qa" / "m0_closeout" / "partition_proposal.json"
+        d = _j.loads(ppath.read_text())
+        for k in ("generation_git_clean", "git_sha", "config_hash",
+                  "audit_code_hash", "restamp_note"):
+            d.pop(k, None)
+        ppath.write_text(_j.dumps(d))
+        parts = parts.model_copy(update={
+            "partition_proposal_sha256":
+                _h.sha256(ppath.read_bytes()).hexdigest()})
+        with pytest.raises(PartitionsNotActiveError,
+                           match="generation_git_clean"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_clean_proposal_still_valid_after_audit_only_descendant_commit(
+            self, tmp_path):
+        # A proposal generated at an implementation commit must remain
+        # acceptable once an audit-log-only commit has moved HEAD past it.
+        import subprocess
+
+        from nqresearch import paths
+        from nqresearch.holdout import _verify_artifact_envelope
+
+        parent = subprocess.run(
+            ["git", "-C", str(paths.ROOT), "rev-parse", "HEAD~1"],
+            capture_output=True, text=True).stdout.strip()
+        head = subprocess.run(
+            ["git", "-C", str(paths.ROOT), "rev-parse", "HEAD"],
+            capture_output=True, text=True).stdout.strip()
+        assert parent and parent != head
+        import conftest as _fx
+        doc = {**_fx.clean_envelope(), "git_sha": parent,
+               "artifact": "partition_proposal"}
+        _verify_artifact_envelope("partition_proposal.json", doc)  # no raise
+
+    def test_real_historical_artifacts_are_activation_ineligible(self):
+        # Expected and correct: the historical closeout artifacts predate the
+        # clean-generation envelope policy, so they cannot activate until a
+        # reviewed clean-tree regeneration.
+        import hashlib as _h
+
+        from nqresearch import paths
+        from nqresearch.holdout import _verify_artifact_envelope
+
+        live = (paths.data_root() / "qa" / "m0_closeout"
+                / "mbo_blocks_frozen.json")
+        if not live.is_file():
+            pytest.skip("live closeout artifact not available")
+        import json as _j
+        doc = _j.loads(live.read_text(encoding="utf-8"))
+        assert "generation_git_clean" not in doc  # legacy envelope
+        with pytest.raises(PartitionsNotActiveError,
+                           match="generation_git_clean"):
+            _verify_artifact_envelope("mbo_blocks_frozen.json", doc)
+        _ = _h
+
+    def test_coverage_binding_must_agree_with_matrix(self, tmp_path):
+        # One truth: the config-bound coverage identity must equal the one
+        # the evidence matrix already verified.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        parts = parts.model_copy(
+            update={"coverage_artifact_sha256": "9" * 64})
+        with pytest.raises(PartitionsNotActiveError, match="identity mismatch"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
     def test_jan9_reference_wrong_hash_fails(self, tmp_path):
