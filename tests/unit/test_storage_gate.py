@@ -39,4 +39,4 @@ class TestStorageGate:
         r = _gate(500)
         assert r["required_free_gb"] == 1000
         assert r["preferred_free_gb"] == 2000
-        assert r["data_root"] == str(Path.cwd())
+        assert r["measured_data_root"] == str(Path.cwd())

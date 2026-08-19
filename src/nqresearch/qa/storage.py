@@ -46,7 +46,10 @@ def storage_gate(
         detail = "below required minimum free space for the full MBP-1 purchase"
     return {
         "artifact": "storage_gate",
-        "data_root": str(data_root),
+        # measured_data_root: the root this gate MEASURED (an argument, not
+        # necessarily the configured one). "data_root" is a reserved envelope
+        # field stamped centrally by qa.report and may not appear in payloads.
+        "measured_data_root": str(data_root),
         "measured_volume_anchor": str(anchor),
         "total_gb": round(usage.total / GB, 1),
         "free_gb": round(free_gb, 1),

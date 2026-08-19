@@ -116,11 +116,9 @@ def _run_audit(part: str, chunk_rows: int) -> int:
         payloads["storage_gate"] = storage_gate(
             paths.data_root(), load_data_paths_config().storage_gate
         )
+        # generation cleanliness + restamp_note are stamped centrally by the
+        # envelope layer (qa.report); payloads may not supply them.
         for name, payload in payloads.items():
-            payload["restamp_note"] = (
-                "Generated from an uncommitted working tree; re-stamp by "
-                "re-running --part mbp1-acquisition after the acquisition commit."
-            )
             p = write_artifact(payload, out_dir, name, paths.ROOT)
             statuses[name] = payload["status"]
             print(f"[acq] {name}: {payload['status']} -> {p}", flush=True)
@@ -142,10 +140,6 @@ def _run_audit(part: str, chunk_rows: int) -> int:
               flush=True)
         payload = record_level_overlap_comparison(
             load_mbp1_sources(), paths.data_root(), chunk_rows
-        )
-        payload["restamp_note"] = (
-            "Generated from an uncommitted working tree; re-stamp by re-running "
-            "after the acquisition commit."
         )
         p = write_artifact(payload, out_dir, RECORD_LEVEL_ARTIFACT_NAME, paths.ROOT)
         statuses["mbp1-overlap-records"] = payload["status"]

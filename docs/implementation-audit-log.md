@@ -1759,3 +1759,170 @@ in by the entry that creates the initial commit.
   commit-and-restamp sequence — which will also apply the queued `cli.py`
   restamp-note wording correction — is reserved for a separate review. No
   raw data or QA artifact changed. Nothing pushed.
+
+## AL-0043 — Provenance-envelope hardening: generation cleanliness stamped centrally; reserved envelope fields protected; dirty-generation evidence rejected (UNCOMMITTED, PENDING_INDEPENDENT_REVIEW)
+
+- **Category:** review finding + implementation fix + test additions
+  (provenance-restamp PREPARATION; no artifact regenerated).
+- **Findings addressed:**
+  1. **Stale hard-coded note:** `cli.py` unconditionally stamped
+     "Generated from an uncommitted working tree…" into acquisition
+     artifacts regardless of the actual tree state — the queued
+     restamp-note issue was a symptom of the envelope layer not knowing
+     the Git state at all.
+  2. **Dirty-tree acceptance risk (newly identified):** nothing bound
+     acquisition evidence to a CLEAN COMMITTED tree — artifacts generated
+     from a dirty/unborn tree carried a plausible `git_sha` (or None) and
+     `require_provenance()` would accept them if code/config/manifest
+     hashes matched.
+  3. **Reserved-envelope overwrite risk:** `write_artifact()` merged
+     `**payload` after the envelope, letting any payload silently replace
+     `git_sha`, `config_hash`, `audit_code_hash`, `data_root`,
+     `generated_at_utc` — the exact fields provenance trusts.
+- **Remediation:**
+  - `qa/report.py` is now the single authority for generation provenance:
+    it determines HEAD (`_git_sha`, unborn-safe) and complete cleanliness
+    (`_git_clean`: tracked + staged + untracked via `git status
+    --porcelain`; any git failure = False, never a silent pass) and stamps
+    machine-readable `generation_git_clean: true|false` plus a dynamically
+    accurate `restamp_note` (clean: "Generated from a clean committed tree
+    at the recorded git_sha."; dirty/unborn: "…NOT eligible for provenance
+    acceptance…"). NO override or allow-dirty parameter exists; dirty-tree
+    generation remains available for pre-commit inspection but is stamped
+    ineligible.
+  - `RESERVED_ENVELOPE_KEYS` defined centrally (generated_at_utc,
+    nqresearch_version, git_sha, generation_git_clean, restamp_note,
+    audit_code_hash, config_hash, data_root); a payload supplying any of
+    them raises `ReservedEnvelopeKeyError` (explicit collision refusal —
+    exposes caller bugs rather than silently preferring trusted values).
+    Payloads can therefore never supply or forge the cleanliness field.
+  - `cli.py`: both hard-coded restamp_note statements REMOVED (they would
+    now be refused as reserved-key collisions).
+  - `qa/storage.py`: payload field `data_root` renamed
+    `measured_data_root` (it is the measured argument, and `data_root` is
+    now reserved for the envelope).
+  - `sources.require_provenance()` now additionally refuses when
+    `generation_git_clean` is missing or not exactly boolean `true`
+    (False/"true"/1/anything else rejected) or when the gate lacks a valid
+    40-hex committed `git_sha`. The gate SHA is deliberately NOT required
+    to equal current HEAD (the audit-log-only second commit legitimately
+    follows generation); semantic validity continues to ride on the
+    acquisition-code hash, config hash and manifest identities.
+- **Tests (synthetic temporary Git repositories only; no live artifact
+  touched):** clean committed repo → true + clean note; unstaged tracked
+  change / staged change / untracked file / unborn repo / non-Git dir →
+  false (+ ineligibility note; unborn also records git_sha null); every
+  reserved key individually refused when supplied by a payload; ordinary
+  payload fields still pass through; `require_provenance()` rejects
+  missing cleanliness, False, "true", "True", 1, 0, None, [] and malformed
+  git_sha values (None/""/"HEAD"/short/non-hex/uppercase/int); a valid
+  clean-generation gate with a DIFFERENT committed SHA remains accepted
+  (audit-only-commit pattern) while code/config/manifests are unchanged;
+  no override/allow/dirty parameter exists on `write_artifact()` or
+  `require_provenance()`.
+- **Provenance consequence (intended):** live `require_provenance()` now
+  refuses for an ADDITIONAL independent reason — the existing on-disk
+  acquisition artifacts predate the envelope hardening and carry no
+  `generation_git_clean` binding. Provenance remains intentionally stale
+  until the later separately reviewed commit-and-restamp sequence, which
+  must regenerate the acquisition evidence from a clean committed tree.
+- **Files changed:** `src/nqresearch/qa/report.py`, `src/nqresearch/cli.py`,
+  `src/nqresearch/sources.py`, `src/nqresearch/qa/storage.py`,
+  `tests/unit/test_artifact_envelope.py` (NEW),
+  `tests/unit/test_require_provenance.py`,
+  `tests/unit/test_storage_gate.py`. `sources.py` is inside the
+  acquisition-code-hash module set: `acquisition_code_hash()` moves, which
+  is correct — the restamp must regenerate under the new code identity.
+  No raw data, evidence file, or QA artifact changed.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0044 — Gate git_sha must be a REAL ancestral commit, not merely 40 hex characters (supplements AL-0043; prior entries unchanged)
+
+- **Category:** review finding + implementation fix + test replacement.
+- **Finding (format-only SHA defect):** AL-0043's `require_provenance()`
+  validated `git_sha` only as 40 lowercase hex characters. A fabricated
+  value such as `"b" * 40` therefore passed — it satisfies the format while
+  referencing NO commit anywhere, so it proved nothing about a committed
+  generation state. Worse, the AL-0043 "audit-log-only commit accepted"
+  test itself used exactly such a fabricated SHA, so it demonstrated only
+  that format checking ignores the value, not the claimed
+  ancestor-tolerance behaviour.
+- **Remediation:** new PRIVATE fail-closed helper
+  `sources._verify_committed_ancestor(sha, repo_root)` using non-mutating
+  Git operations: `git cat-file -e <sha>^{commit}` (object must exist AND
+  peel to a commit — blobs/trees fail) and `git merge-base --is-ancestor
+  <sha> HEAD` (must be an ancestor of current HEAD). Any Git execution
+  failure, missing repository, unborn HEAD, nonexistent object, non-commit
+  object, or non-ancestor commit raises ProvenanceError. HEAD equality is
+  deliberately NOT required — an audit-log-only commit after generation
+  keeps the generation commit a valid ancestor while code/config/manifest
+  bindings carry semantic validity. `require_provenance()` calls the helper
+  against the ACTUAL project repository (`paths.ROOT`) and gained no
+  public repository-root override (exact-signature test: `data_root` +
+  `registry` only); the helper root parameter exists solely for synthetic
+  test repositories.
+- **Tests replaced/added:** the fabricated-SHA "accepted" test is REPLACED
+  by (a) a rejection test proving `"b" * 40` now refuses ("commit
+  object"), and (b) a REAL-history acceptance test at the
+  require_provenance level using the project's actual `HEAD~1` (a genuine
+  ancestor — precisely the implementation-commit/audit-commit pattern).
+  New `TestCommittedAncestorBinding` builds temporary Git repositories:
+  implementation commit A → audit-only commit B → A verified to exist, be
+  B's ancestor, and be accepted by the helper while HEAD is B; rejections
+  for a fabricated well-formed SHA, an existing commit on a non-ancestor
+  branch, blob and tree SHAs, a non-Git directory, an unborn repository,
+  and a Git execution failure (subprocess monkeypatched to raise). The
+  default gate fixture now records the REAL project HEAD instead of
+  `"a" * 40`. Malformed-SHA format tests and the no-override signature
+  test retained.
+- **Verification:** full suite **460/460 pass** (was 452); live
+  `require_provenance()` still refuses — first on the on-disk gate's
+  missing `generation_git_clean` (legacy envelope), as intended until the
+  reviewed restamp; no raw data, evidence file, or QA artifact changed; no
+  `partitions_active.yaml`; `git diff --check` clean.
+- **Files changed:** `src/nqresearch/sources.py`,
+  `tests/unit/test_require_provenance.py`.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0045 — Annotated-tag object accepted as git_sha: exact object-type proof (supplements AL-0044; prior entries unchanged)
+
+- **Category:** review finding + implementation fix + regression test.
+- **Finding (commit-identity defect):** AL-0044's helper proved object type
+  with `git cat-file -e <sha>^{commit}`. That form *peels* an annotated
+  tag to its target commit, so an ANNOTATED TAG OBJECT's own SHA passed
+  both checks and was accepted as `git_sha`, contradicting the required
+  guarantee that the recorded SHA itself identifies a commit object.
+- **Reproduction (this session, synthetic repo):** commit A
+  `a1b50b114510bbc4418480b81462e4d434e69bf9`; annotated tag object
+  `8242928e15ef2b71c877f71b0725cafeac9441b0` with
+  `git cat-file -t` → `tag`; `git cat-file -e <tag-sha>^{commit}` → rc 0
+  (peeled); `git merge-base --is-ancestor <tag-sha> HEAD` → rc 0. The
+  pre-fix helper therefore accepted a non-commit object.
+- **Remediation:** the object-type proof is now non-peeling —
+  `git cat-file -t <sha>` must execute successfully AND print exactly
+  `commit`. Annotated-tag objects, blobs, trees, missing objects,
+  malformed output, and Git failures all refuse (the refusal message now
+  reports the observed object type). The ancestry check
+  (`git merge-base --is-ancestor <sha> HEAD`) runs only AFTER the exact
+  type proof passes, still failing closed on any nonzero result or
+  execution failure. A LIGHTWEIGHT tag remains acceptable because its SHA
+  *is* the commit object's SHA — covered by its own test.
+- **Tests added:** annotated-tag regression (creates commit A + annotated
+  tag, asserts `cat-file -t` returns `tag`, asserts the peeling form
+  `<tag-sha>^{commit}` still succeeds — pinning the defect that made this
+  necessary — then asserts the helper REJECTS the tag SHA while still
+  accepting commit A); lightweight-tag acceptance test. All AL-0044 tests
+  preserved unchanged: genuine implementation commit accepted from a later
+  audit-log-only commit, fabricated SHA, non-ancestor branch commit, blob,
+  tree, non-Git directory, unborn repository, Git execution failure, and
+  the public `require_provenance()` signature test (no repository
+  override).
+- **Verification:** full suite **462/462 pass** (was 460); live
+  `require_provenance()` still refuses on the on-disk gate's missing
+  `generation_git_clean` (legacy envelope), as intended until the reviewed
+  restamp; acquisition-gate and coverage artifacts byte-unchanged; all 45
+  evidence files unchanged; no `partitions_active.yaml`; `git diff
+  --check` clean.
+- **Files changed:** `src/nqresearch/sources.py`,
+  `tests/unit/test_require_provenance.py`.
+- **Commit:** none (stop-for-review rule); nothing pushed.
