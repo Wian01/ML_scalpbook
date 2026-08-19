@@ -1367,3 +1367,50 @@ in by the entry that creates the initial commit.
   provenance STALE-BY-DESIGN (unchanged posture); no activation config; raw
   data and QA artifacts untouched; nothing committed/pushed.
 - **Status:** **PENDING_INDEPENDENT_AUDIT**.
+
+## AL-0037 — Milestone 1 PASS; immutable commit; acquisition evidence re-bound
+
+- **Category:** protocol-relevant decision + artifact regeneration
+- **Independent audit verdict: PASS** (after four adversarial rounds,
+  AL-0032/AL-0034/AL-0035/AL-0036).
+- **Immutable Milestone 1 commit (never amended):**
+  **`6c44ade81214bdb53dc5febbad6ad6be5525809d`** — "Milestone 1 foundation:
+  immutable experiment registry and mechanical data fences" (23 files, 3,391
+  insertions, 32 deletions). Pre-commit checks confirmed: no data/ path, raw
+  vendor file, QA artifact, experiment database, or real experiment
+  directory staged; no partitions_active.yaml exists.
+- **Acquisition evidence re-bound** (eight artifacts under
+  `<data_root>/qa/mbp1_full_history/`, dependency order; the gate FAILed
+  while the record-level evidence carried the old code binding, then
+  finished **PASS with 9/9 named checks** — as expected). All eight
+  envelopes record git_sha `6c44ade81214bdb53dc5febbad6ad6be5525809d`,
+  config hash
+  `95a9dd78ae8beca9f128af2aa49256fdf103d7b300c568331b7eb7af6874163d`,
+  package/audit code hash
+  `2237f8b7ae9cdf3f5f882e852c9b0633709ed5d70d9f54bcc761447e54bda59a`,
+  acquisition-code binding `d1ffb9031d48…`, data_root
+  `D:\nq-research\data`.
+- **Substantive results (unchanged):** manifest validation 642/642 PASS,
+  zero failures; range adjacency PASS; source selection PASS; sample
+  overlap explained WARN; record-level overlap **11/11 pairs,
+  115,583,040 records identical**; storage 1,720.8 GB free (WARN — ≥1 TB
+  minimum met). Live `require_provenance()`: **PASS**.
+- **Artifact SHA-256 (final):**
+  - `mbp1_acquisition_gate.json` PASS `5a5e140912e0d079dc7127cc600c36975e2497e491506e16d74dca3489e06984`
+  - `mbp1_manifest_validation.json` PASS `1b8d58618ea30dcad24232ef1477a23b4b2d8bc806f4c32f11b5b98f22f48f65`
+  - `mbp1_range_adjacency.json` PASS `ce20b4e6ebcf27116f72bfdf7b0f890e98aaccee394d2a22de984b295a318ce5`
+  - `mbp1_sample_overlap.json` WARN `1ff7342f8322ea59133998a3559b9725325220fc52cd1b125e57a7c701f00605`
+  - `mbp1_sample_overlap_record_level.json` PASS `363b4e9091d45b28220337ebb319ef74a3582be45233f00aadbc089bc272fcbd`
+  - `mbp1_source_inventory.json` WARN `0dcdf591281f4aded80885157d0c209ab57688cbb23480ec8b4f4d61c2b6ba93`
+  - `mbp1_source_selection.json` PASS `e507524a87bdec8f0b4d59fda24ff9bffa37fbd81c758f4c8aaf48561152cce4`
+  - `storage_gate.json` WARN `a635276742a8f1b2e9f45cde11aa68cb5ee3529680ab9fa64b4d3145381f7b92`
+- **Post-re-bind verification:** 342/342 tests; research access still
+  refuses with PartitionsNotActiveError; legacy public
+  `sources.research_input_entries/files` remain absent; no
+  partitions_active.yaml exists; `git diff --check` clean.
+- **Deliberately preserved:** the four historical Milestone 0 closeout
+  artifacts (`qa/m0_closeout/`) were intentionally NOT regenerated — they
+  remain historical closeout evidence under their original binding.
+  **Partitions remain unactivated.** No raw vendor data was modified.
+- **Commit:** this entry is the audit-log-only second commit (two-commit
+  stamping pattern; the Milestone 1 commit is never amended).
