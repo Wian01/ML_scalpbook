@@ -85,7 +85,14 @@ class TestPartitionGates:
         if not deep.is_file():
             _pytest.skip("mbo_deep_audit.json not available on this machine")
         blocks = freeze_mbo_blocks(deep)
-        prop = propose_partitions(blocks)
+        # Bind the live MBO-block artifact identity exactly as the CLI does
+        # after writing it; without it the identity binding is incomplete.
+        import hashlib as _h
+        blocks_artifact = (paths.data_root() / "qa" / "m0_closeout"
+                           / "mbo_blocks_frozen.json")
+        blocks_sha = (_h.sha256(blocks_artifact.read_bytes()).hexdigest()
+                      if blocks_artifact.is_file() else "a" * 64)
+        prop = propose_partitions(blocks, mbo_blocks_artifact_sha256=blocks_sha)
         assert blocks["n_sessions_final"] == 77 and blocks["n_blocks"] == 30
         ms, mb = prop["mbo_sessions_per_partition"], prop["mbo_blocks_per_partition"]
         assert prop["proposal"]["DEV"]["trading_days"] == 318
