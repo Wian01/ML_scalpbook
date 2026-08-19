@@ -1716,3 +1716,46 @@ in by the entry that creates the initial commit.
   `partitions_active.yaml`; provenance stale by design; no raw data or QA
   artifact changed; `git diff --check` clean.
 - **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0042 — Calendar-evidence implementation committed (immutable); identities bound
+
+- **Category:** protocol-relevant decision (approved commit) + record of
+  the exact identities the review approved.
+- **Independent review APPROVED** the PA-0001 calendar-evidence
+  implementation (four adversarial correction rounds, AL-0038..AL-0041 all
+  closed). The complete reviewed tree — 17 files including
+  `docs/protocol-amendments/PA-0001-cme-calendar-evidence-policy.md`,
+  `config/data/cme_calendar_evidence.yaml`,
+  `src/nqresearch/calendar_evidence.py`, the holdout/closeout/rawguard/
+  config changes, the rebuilt tests, and audit entries AL-0038..AL-0041 —
+  is committed as the **immutable implementation commit
+  `58136099d97d0d042acdeb7dbb5442b6a6d48170`** ("Calendar evidence:
+  date-level verification and fail-closed activation safeguards"). This
+  commit is never amended; this entry is the separate audit-log-only
+  second commit (two-commit stamping pattern).
+- **Pre-commit verifications:** full suite **418/418 pass**;
+  `docs/canonical-spec-v1.0.md` unchanged; no data-tree path, external
+  evidence file, QA artifact, experiment database, or generated experiment
+  directory staged; no `partitions_active.yaml` exists; no raw vendor data
+  staged or modified; `git diff --check` clean.
+- **Bound identities at commit time:**
+  - evidence matrix (`config/data/cme_calendar_evidence.yaml`) SHA-256
+    `89cc29fda3bf079cfc4c853e5cacc6f10480665f6dbc247265f21ff9a8570aad`;
+  - GCC archive-unavailability email SHA-256
+    `67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0`;
+  - coverage artifact SHA-256
+    `03545b61595bf3375ab6880d4b7ce3e5d88fa61522291911e43dc3f6b9ea6687`;
+  - effective config hash
+    `2dccccbd76daeb90f021faf3ddcc65efddc1067788892ac661635b675ac0e347`;
+  - effective calendar identity UNCHANGED
+    `ca2edfe6c2d05007c35837341ac73de955d8df6fd7821410307bf7fc18a3d010`.
+- **State at commit:** 8 DOCUMENT_VERIFIED / 8
+  TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE / 10 PENDING_EVIDENCE / 0
+  conflicts; all nine recurring groups conservatively PENDING_EVIDENCE;
+  calendar verification PROVISIONAL_DOCUMENT_VERIFICATION_PENDING;
+  **partitions remain inactive** (no `partitions_active.yaml`,
+  activation_ready=false). **Acquisition provenance remains stale by
+  design** (gate bound to config hash `95a9dd78…`): the formal
+  commit-and-restamp sequence — which will also apply the queued `cli.py`
+  restamp-note wording correction — is reserved for a separate review. No
+  raw data or QA artifact changed. Nothing pushed.
