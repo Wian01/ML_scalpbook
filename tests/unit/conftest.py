@@ -153,7 +153,9 @@ def synthetic_matrix_doc(evid_dir, date_states=None, observed_available=None,
             "evidence_root": "reference/cme_calendar",
             "observed_reference": {
                 "artifact": "qa/m0_closeout/mbp1_full_history_coverage.json",
-                "artifact_sha256": None,  # set by write_coverage_for()
+                # set by write_coverage_for()
+                "substance_digest_algorithm": "coverage-substance-v1",
+                "substance_sha256": None,
             },
         },
         "archive_unavailability": {
@@ -217,9 +219,18 @@ def write_coverage_for(data_root, matrix_doc):
              "detail": "synthetic"},
         ],
         "sessions": sessions}))
-    matrix_doc["meta"]["observed_reference"]["artifact_sha256"] = (
-        hashlib.sha256(p.read_bytes()).hexdigest()
+    # The matrix binds the versioned SUBSTANCE digest (envelope-independent),
+    # never the whole-file hash — the whole-file identity is bound separately
+    # at activation.
+    from nqresearch.calendar_evidence import (
+        COVERAGE_SUBSTANCE_ALGORITHM,
+        coverage_substance_sha256,
     )
+
+    ref = matrix_doc["meta"]["observed_reference"]
+    ref["substance_digest_algorithm"] = COVERAGE_SUBSTANCE_ALGORITHM
+    ref["substance_sha256"] = coverage_substance_sha256(
+        json.loads(p.read_text()))
     return p
 
 

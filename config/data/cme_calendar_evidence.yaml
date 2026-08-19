@@ -43,16 +43,38 @@ meta:
     (ts_event), converted using America/Chicago DST rules.
   observed_reference:
     artifact: qa/m0_closeout/mbp1_full_history_coverage.json  # relative to data_root
-    artifact_sha256: "03545b61595bf3375ab6880d4b7ce3e5d88fa61522291911e43dc3f6b9ea6687"
-    generated_at_utc: "2026-08-18T15:31:30Z"
-    git_sha: 3c7aee5e0f240b69d136ff341b608644dafc7a52
+    # LIVE binding (PA-0002 / AL-0053): a versioned digest of the coverage
+    # artifact's SUBSTANCE — every non-envelope field, including the artifact
+    # type, all corpus/accounting fields and the complete per-session
+    # observations. The eight provenance-envelope fields owned by
+    # qa/report.py (generated_at_utc, nqresearch_version, git_sha,
+    # generation_git_clean, restamp_note, audit_code_hash, config_hash,
+    # data_root) are excluded.
+    substance_digest_algorithm: coverage-substance-v1
+    substance_sha256: "2ebf83b6e44c42b24836453740702db2eb5012907bba701de46de4168cd88d39"
+    # HISTORICAL / AUDIT-ONLY. This whole-file SHA-256 of the original
+    # 2026-08-18 coverage artifact is retained for provenance history and
+    # takes NO part in live matrix validation. Binding the whole file here
+    # was circular (AL-0052): the file's envelope carries the effective
+    # config hash, which carries the eligibility policy, which binds this
+    # matrix, which bound the file.
+    historical_whole_file_sha256_audit_only: "03545b61595bf3375ab6880d4b7ce3e5d88fa61522291911e43dc3f6b9ea6687"
+    historical_generated_at_utc: "2026-08-18T15:31:30Z"
+    historical_git_sha: 3c7aee5e0f240b69d136ff341b608644dafc7a52
     note: >-
       Observed per-date behaviour below is transcribed from this artifact.
-      The activation verifier first checks the live artifact's bytes against
-      artifact_sha256, then mechanically re-checks every per-date observed
-      block against it. Regenerating the artifact is a reviewed event; spans
-      are deterministic and must reproduce identically, and the regenerated
-      artifact identity must be re-bound here in a reviewed change.
+      Validation RECOMPUTES the coverage-substance-v1 digest from the live
+      artifact's bytes (never trusting any digest declared inside the
+      artifact), compares it with substance_sha256, and only then
+      mechanically re-checks every per-date session presence and RTH span
+      against the live artifact. Envelope-only regeneration — a new commit,
+      config hash or code hash — therefore does NOT invalidate this
+      observation evidence, while ANY substantive change to a session, span,
+      count, warning, classification or coverage result DOES. The artifact's
+      exact whole-file identity is bound separately and independently at
+      partition activation (ActivePartitions.coverage_artifact_sha256 and
+      the approved partition proposal); the two identities serve different
+      purposes and are never compared with each other.
 
 archive_unavailability:
   statement: >-

@@ -23,7 +23,7 @@ meta:
     rule", with a machine-readable reason code per excluded session; defined
     in advance of any feature, label, model or result, and therefore not one
     of §50's forbidden outcome-driven exclusions.
-  evidence_matrix_sha256: 89cc29fda3bf079cfc4c853e5cacc6f10480665f6dbc247265f21ff9a8570aad
+  evidence_matrix_sha256: f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250
   rationale: >-
     CME confirmed no archive of previous years' holiday calendars exists, so
     these ten exceptional sessions have no independent corroboration of their

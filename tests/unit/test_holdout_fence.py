@@ -803,11 +803,10 @@ class TestActivationEvidence:
                            match="permitted statuses"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
-    def test_coverage_content_change_trips_matrix_identity_first(self,
-                                                                 tmp_path):
-        # Coverage is DOUBLY bound (evidence matrix + active configuration),
-        # so any content change is caught by the matrix identity check before
-        # the per-artifact status rule is even reached.
+    def test_substantive_coverage_change_trips_matrix_substance_digest(
+            self, tmp_path):
+        # A SUBSTANTIVE coverage change invalidates the matrix substance
+        # digest, which is checked before any date-level claim is trusted.
         from nqresearch.holdout import _verify_activation_evidence
 
         parts, repo_root, data_root = self._evidence_env(
@@ -817,18 +816,53 @@ class TestActivationEvidence:
                                     status="PASS")
         parts = parts.model_copy(update={"coverage_artifact_sha256": sha})
         with pytest.raises(PartitionsNotActiveError,
+                           match="SUBSTANCE digest mismatch"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_wrong_whole_file_sha_rejected_even_when_substance_matches(
+            self, tmp_path):
+        # THE two-identity guarantee: an envelope-only edit keeps the
+        # substance digest valid, but the exact whole-file identity bound by
+        # ActivePartitions must still match.
+        import json as _j
+
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        p = (data_root / "qa" / "m0_closeout"
+             / "mbp1_full_history_coverage.json")
+        before = coverage_substance_sha256(_j.loads(p.read_text()))
+        # envelope-only mutation: substance digest unchanged, file SHA changes
+        self._mutate_artifact(data_root, "mbp1_full_history_coverage.json",
+                              generated_at_utc="2099-01-01T00:00:00Z")
+        after = coverage_substance_sha256(_j.loads(p.read_text()))
+        assert after == before  # substance identity survives
+        with pytest.raises(PartitionsNotActiveError,
                            match="identity mismatch"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
     def _structural_env(self, tmp_path, parts, data_root, sha):
-        """Stub matrix + proposal that agree with a mutated coverage hash, so
-        the coverage ACCEPTANCE rule is what fires rather than an earlier
+        """Stub matrix + proposal that agree with a mutated coverage artifact
+        on BOTH identities (exact file SHA and substance digest), so the
+        coverage ACCEPTANCE rule is what fires rather than an earlier
         identity check."""
+        import json as _j
         import types
 
+        from nqresearch.calendar_evidence import (
+            COVERAGE_SUBSTANCE_ALGORITHM,
+            coverage_substance_sha256,
+        )
+
+        cov_doc = _j.loads(
+            (data_root / "qa" / "m0_closeout"
+             / "mbp1_full_history_coverage.json").read_text())
         parts = parts.model_copy(update={"coverage_artifact_sha256": sha})
-        stub_matrix = types.SimpleNamespace(
-            meta={"observed_reference": {"artifact_sha256": sha}})
+        stub_matrix = types.SimpleNamespace(meta={"observed_reference": {
+            "substance_digest_algorithm": COVERAGE_SUBSTANCE_ALGORITHM,
+            "substance_sha256": coverage_substance_sha256(cov_doc)}})
         proposal = {"research_eligibility_binding": {
             "structural_artifact_sha256": {
                 "coverage_artifact_sha256": sha,
@@ -1014,38 +1048,88 @@ class TestActivationEvidence:
                "artifact": "partition_proposal"}
         _verify_artifact_envelope("partition_proposal.json", doc)  # no raise
 
-    def test_real_historical_artifacts_are_activation_ineligible(self):
-        # Expected and correct: the historical closeout artifacts predate the
-        # clean-generation envelope policy, so they cannot activate until a
-        # reviewed clean-tree regeneration.
-        import hashlib as _h
-
-        from nqresearch import paths
+    def test_synthetic_legacy_envelope_is_activation_ineligible(self):
+        # A SYNTHETIC pre-policy artifact (no generation_git_clean, stale
+        # config/code hashes) must be activation-ineligible. Deliberately
+        # synthetic: this invariant must not depend on the mutable live
+        # artifacts still being un-regenerated.
         from nqresearch.holdout import _verify_artifact_envelope
 
-        live = (paths.data_root() / "qa" / "m0_closeout"
-                / "mbo_blocks_frozen.json")
-        if not live.is_file():
-            pytest.skip("live closeout artifact not available")
-        import json as _j
-        doc = _j.loads(live.read_text(encoding="utf-8"))
-        assert "generation_git_clean" not in doc  # legacy envelope
+        legacy = {
+            "artifact": "mbo_blocks_frozen", "status": "PASS",
+            "generated_at_utc": "2026-08-18T15:31:30Z",
+            "nqresearch_version": "0.1.0",
+            "git_sha": "3c7aee5e0f240b69d136ff341b608644dafc7a52",
+            "audit_code_hash": "0" * 64, "config_hash": "0" * 64,
+            "data_root": "D:\\nq-research\\data",
+            "blocks": [], "n_blocks": 0,
+        }
+        assert "generation_git_clean" not in legacy
         with pytest.raises(PartitionsNotActiveError,
                            match="generation_git_clean"):
-            _verify_artifact_envelope("mbo_blocks_frozen.json", doc)
-        _ = _h
+            _verify_artifact_envelope("mbo_blocks_frozen.json", legacy)
 
-    def test_coverage_binding_must_agree_with_matrix(self, tmp_path):
-        # One truth: the config-bound coverage identity must equal the one
-        # the evidence matrix already verified.
-        from nqresearch.holdout import _verify_activation_evidence
+    def test_exact_and_substance_identities_are_checked_independently(
+            self, tmp_path):
+        # The two coverage identities are never compared with each other:
+        # a wrong exact-file SHA fails on identity, and a wrong matrix
+        # substance digest fails on substance — separately.
+        import types
+
+        from nqresearch.calendar_evidence import COVERAGE_SUBSTANCE_ALGORITHM
+        from nqresearch.holdout import (
+            _verify_activation_evidence,
+            _verify_structural_artifacts,
+        )
 
         parts, repo_root, data_root = self._evidence_env(
             tmp_path, self._proposal())
-        parts = parts.model_copy(
+        bad_file = parts.model_copy(
             update={"coverage_artifact_sha256": "9" * 64})
         with pytest.raises(PartitionsNotActiveError, match="identity mismatch"):
-            _verify_activation_evidence(parts, repo_root, data_root)
+            _verify_activation_evidence(bad_file, repo_root, data_root)
+
+        bad_matrix = types.SimpleNamespace(meta={"observed_reference": {
+            "substance_digest_algorithm": COVERAGE_SUBSTANCE_ALGORITHM,
+            "substance_sha256": "8" * 64}})
+        proposal = {"research_eligibility_binding": {
+            "structural_artifact_sha256": {
+                "coverage_artifact_sha256": parts.coverage_artifact_sha256,
+                "mbo_blocks_sha256": parts.mbo_blocks_sha256,
+                "front_contract_series_sha256":
+                    parts.front_contract_series_sha256}}}
+        with pytest.raises(PartitionsNotActiveError,
+                           match="substance digest does not equal"):
+            _verify_structural_artifacts(parts, bad_matrix, data_root,
+                                         repo_root, proposal)
+
+    @pytest.mark.parametrize("ref,match", [
+        ({"substance_digest_algorithm": "coverage-substance-v0",
+          "substance_sha256": "a" * 64}, "substance digest algorithm"),
+        ({"substance_sha256": "a" * 64}, "substance digest algorithm"),
+        ({"substance_digest_algorithm": "coverage-substance-v1"},
+         "no valid coverage substance digest"),
+        ({"substance_digest_algorithm": "coverage-substance-v1",
+          "substance_sha256": "nothex"}, "no valid coverage substance digest"),
+    ])
+    def test_activation_rejects_bad_matrix_substance_declaration(
+            self, tmp_path, ref, match):
+        import types
+
+        from nqresearch.holdout import _verify_structural_artifacts
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal())
+        stub = types.SimpleNamespace(meta={"observed_reference": ref})
+        proposal = {"research_eligibility_binding": {
+            "structural_artifact_sha256": {
+                "coverage_artifact_sha256": parts.coverage_artifact_sha256,
+                "mbo_blocks_sha256": parts.mbo_blocks_sha256,
+                "front_contract_series_sha256":
+                    parts.front_contract_series_sha256}}}
+        with pytest.raises(PartitionsNotActiveError, match=match):
+            _verify_structural_artifacts(parts, stub, data_root, repo_root,
+                                         proposal)
 
     def test_jan9_reference_wrong_hash_fails(self, tmp_path):
         # A well-formed but wrong Jan-9 document hash must not activate.

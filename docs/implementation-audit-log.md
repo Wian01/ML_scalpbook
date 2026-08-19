@@ -2550,3 +2550,203 @@ in by the entry that creates the initial commit.
   changed; **no `partitions_active.yaml`**; no HOLDOUT/FORWARD access; no
   normalization, feature, label or model work.
 - **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0052 — PA-0002 implementation committed and artifacts regenerated; closeout stamping BLOCKED by a circular evidence-matrix/coverage binding (finding)
+
+- **Category:** commit record + artifact regeneration + BLOCKING design
+  finding. AL-0047 through AL-0051 and all earlier entries are unchanged.
+- **Immutable implementation commit:**
+  `f6b43537ebb7f301573fe4b8f95037a7fefa3e1c` — "PA-0002: quarantine
+  evidence-pending sessions from research eligibility" (19 files, +4,294/-65,
+  containing AL-0047..AL-0051). Never amended. Pre-commit verification:
+  938/938 tests, `git diff --check` clean, exactly the 19 reviewed paths,
+  `docs/canonical-spec-v1.0.md` unchanged, no data/QA/evidence/raw/registry
+  path staged, no `partitions_active.yaml`, policy
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`, calendar
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`, config hash `fbbccd44…`.
+  (A first commit attempt aborted harmlessly when a PowerShell here-string
+  mis-parsed an apostrophe in the message; nothing was committed and the
+  commit was re-issued from a message file.)
+- **All 12 artifacts regenerated from the clean committed tree** in
+  dependency order (acquisition validation -> record-level overlap -> gate ->
+  coverage -> front series -> MBO blocks -> partition proposal). Every one
+  carries the SHARED envelope: `git_sha`
+  `f6b43537ebb7f301573fe4b8f95037a7fefa3e1c`, `generation_git_clean` boolean
+  true, the clean committed-tree note, `config_hash`
+  `fbbccd441ae4907b2699f06535a1019a5f4631a9977947f1f96aa3146cdfef8e`,
+  `audit_code_hash`
+  `44cbe2508418d6e0c538eda039f27b0da1768bc5cfdf58e24c2d28b106769456`,
+  `data_root` `D:\nq-research\data`.
+  - `8bc8cda9dcc897cf5cde3e6c420ea4af54b6ecbff81a3a19608f2a4148ece35c` PASS mbp1_acquisition_gate.json
+  - `c2a214c4f7eb87062e9c703f7e568b6c2ed21d2f5b78fd041de60fd0f0057349` PASS mbp1_manifest_validation.json
+  - `8fd16bad383aa71d2084e29fa46bd22f67f4ebd8c736fb04a37395e21b5835c6` PASS mbp1_range_adjacency.json
+  - `51450b7acf27be113f10600fb502469a74168a9c3e3378c2d9e1b180c0ee4a4c` WARN mbp1_sample_overlap.json
+  - `608be88e437644e198ac738f9afd0075a0c5d00fc45e993df302dcd35e001adf` PASS mbp1_sample_overlap_record_level.json
+  - `ae3f9ad216367b7bd26062e7d61d5274516d4f2e81d9613331b7722cd1c7c86a` WARN mbp1_source_inventory.json
+  - `72d35f58e76de6bbeb89a1fefe64a26fc6d91035331ed3612923136b361d7c7d` PASS mbp1_source_selection.json
+  - `8911f466f574f862f0d1b153010f85671bef47ec7426299e09d204dc63239d68` WARN storage_gate.json
+  - `71db2f9e6c809c44d301e071dbeb69958a33de90d913fa2086e216712241076b` WARN mbp1_full_history_coverage.json
+  - `383f586276393cd76192c317c99c0a67436e079b081978d441f6f3e65b6e2673` PASS mbp1_front_contract_series.json
+  - `1281917f1e4988e655b3db93c3867b4255419cfe6c7c396dbb6c749351ad47e1` **FAIL** mbo_blocks_frozen.json
+  - `739d4664516a8642d285eeacea46e1c0a9b06e92135672878af54492cff2074f` **FAIL** partition_proposal.json
+- **Acquisition verification PASSES in full:** gate PASS with all 9 named
+  checks PASS; manifests 642/642 with zero failures; record-level overlap
+  11/11 pairs and **115,583,040 records identical**; range adjacency PASS;
+  source selection PASS with zero sample leakage; inventory WARN solely from
+  the 11 understood vendor-degraded dates with zero metadata problems;
+  storage 1,720.7 GB (above the 1 TB minimum). **Live `require_provenance()`
+  PASSES** against the regenerated gate (clean=true, sha f6b43537…).
+- **Coverage and front series verified:** coverage WARN for exactly the
+  understood condition — 516 expected, `n_fail=0`, `missing_sessions=[]`,
+  `cross_file_order_violations=0`,
+  `missing_pre_rth_short_sessions=["2025-04-18"]`, and the single non-PASS
+  check `pre_rth_short_sessions_without_data`; front series PASS with 8
+  causal switches and the 2026-08-17 partial edge session excluded. MBO
+  blocks reproduce 77 sessions / 30 blocks with zero quarantined dates in
+  candidate sessions or block spans; the proposal reproduces DEV/SELECTION/
+  HOLDOUT 318/100/98, MBO 23/23/31, SPANNING 0, all three structural checks
+  PASS, `PROPOSED_NOT_ACTIVE`, `activation_ready=false`.
+- **BLOCKING FINDING — circular binding between the evidence matrix and the
+  coverage artifact.** Regenerating coverage necessarily changed its bytes
+  (`03545b61…` -> `71db2f9e…`) because the envelope now records the new
+  commit, config and code hashes. The committed evidence matrix binds the
+  OLD coverage identity in `meta.observed_reference.artifact_sha256`, so
+  `load_validated_matrix()` correctly refuses, the PA-0002 policy cannot
+  validate, and that failure propagates (exactly as designed in AL-0050) to
+  `mbo_blocks_frozen` and `partition_proposal`, both FAIL. **The coverage
+  SUBSTANCE is unchanged** — 516 expected, 507 PASS / 8 WARN / 0 FAIL, zero
+  missing, zero ordering violations, 5,401,908,864 rows across 625 files,
+  and all 26 per-date observed spans still match the matrix exactly; only
+  the provenance envelope differs.
+  The dependency is genuinely circular and does NOT terminate under a naive
+  re-bind: coverage-artifact bytes contain `config_hash`; `config_hash`
+  includes `research_eligibility.yaml` (added by PA-0002); the policy binds
+  the evidence-matrix SHA; and the matrix binds the coverage-artifact SHA.
+  Updating the matrix therefore changes the policy, which changes the config
+  hash, which changes the coverage envelope, which changes the matrix
+  binding again.
+- **Consequence for tests:** the suite is **911 passed / 27 failed** in this
+  state; every failure traces to the same stale matrix->coverage binding
+  (the fail-closed machinery behaving correctly), not to a new logic defect.
+- **Nothing was weakened, edited around, or forced.** No check was relaxed to
+  make an artifact PASS; no config file was edited (the evidence matrix and
+  the eligibility policy are byte-unchanged); no artifact was hand-patched;
+  the policy remains `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` and is NOT
+  activation-approved; partitions remain inactive with no
+  `partitions_active.yaml`; HOLDOUT/FORWARD were not accessed; no
+  normalization, feature, label, sample, dataset, model or experiment work
+  occurred; raw vendor data and all 45 calendar evidence files are unchanged;
+  Git tracks no data artifacts.
+- **Remediation options recorded for review (none applied):**
+  (a) bind `meta.observed_reference` to a SUBSTANCE digest of the coverage
+  observations (sessions/spans/counters) rather than the whole file, leaving
+  file-identity and envelope verification to activation, which already binds
+  `coverage_artifact_sha256` in `ActivePartitions` — breaks the cycle at its
+  weakest link and matches what the matrix actually needs to assert;
+  (b) remove `research_eligibility.yaml` from `effective_config_hash()` and
+  bind it solely through activation, mirroring the rationale already
+  documented for the evidence matrix — this reverses the explicit PA-0002
+  decision to include it, so it needs approval;
+  (c) any combination. Option (a) is the smaller and more principled change.
+  A reviewed decision is required before the closeout stamping can complete.
+- **Commit:** this entry is UNCOMMITTED. The audit-log-only commit
+  authorized for AL-0052 was NOT made, because the stamping sequence did not
+  reach its required success conditions and the reviewer must choose the
+  remediation. Nothing was pushed.
+
+## AL-0053 — Circular coverage binding broken: versioned coverage-substance digest (remediation of AL-0052)
+
+- **Category:** protocol-relevant design remediation + implementation +
+  test changes. AL-0052 is preserved verbatim as the truthful record of the
+  blocked run; AL-0047..AL-0051 and all earlier entries are unchanged.
+- **Approved remedy (a):** replace the evidence matrix's LIVE whole-file
+  coverage binding with a deterministic, versioned coverage-SUBSTANCE
+  digest. `research_eligibility.yaml` REMAINS inside
+  `effective_config_hash()` (remedy (b) was explicitly not taken).
+- **The cycle, restated:** the coverage artifact's bytes contain its
+  provenance envelope, which contains `config_hash`; `config_hash` includes
+  `research_eligibility.yaml`; the policy binds the evidence-matrix SHA; and
+  the matrix bound the coverage artifact's whole-file SHA. Re-binding the
+  matrix therefore changed the policy, which changed the config hash, which
+  changed the coverage envelope, which invalidated the matrix again — a
+  non-terminating loop that made envelope-only regeneration impossible.
+- **Fix:** new `calendar_evidence.coverage_substance_sha256(document)` with
+  the versioned identifier `coverage-substance-v1`. It hashes canonical JSON
+  (sorted keys, `separators=(",",":")`, `ensure_ascii=True`,
+  `allow_nan=False`) of the artifact's SUBSTANCE: every field except the
+  eight provenance-envelope fields owned by `qa/report.py`
+  (`generated_at_utc`, `nqresearch_version`, `git_sha`,
+  `generation_git_clean`, `restamp_note`, `audit_code_hash`, `config_hash`,
+  `data_root`) and except an informational self-digest field, so the digest
+  can never include itself. It therefore covers the artifact type, every
+  corpus/accounting field, all checks/warnings/classifications and the
+  complete per-session observations. Non-dictionary documents, documents
+  with no substantive fields, non-serialisable values and non-finite numbers
+  are refused.
+- **Matrix binding updated** (`config/data/cme_calendar_evidence.yaml`):
+  `meta.observed_reference` now declares
+  `substance_digest_algorithm: coverage-substance-v1` and
+  `substance_sha256:
+  2ebf83b6e44c42b24836453740702db2eb5012907bba701de46de4168cd88d39`.
+  The previous whole-file SHA `03545b61…` is retained ONLY as
+  `historical_whole_file_sha256_audit_only` (with the original generation
+  timestamp and git SHA) and takes no part in live validation. The note now
+  states exactly what is verified: the digest is RECOMPUTED from the live
+  bytes (never trusted from inside the artifact), compared, and only then is
+  every per-date session presence and RTH span checked; envelope-only
+  regeneration does not invalidate the observation evidence while any
+  substantive change does.
+- **`verify_observed_against_coverage()`** now requires the declared
+  algorithm to equal `coverage-substance-v1`, requires a valid 64-hex
+  `substance_sha256`, parses the live artifact, recomputes the digest,
+  fails on missing/unknown algorithm or malformed/mismatched digest BEFORE
+  any date-level claim is trusted, and then still checks all 26 per-date
+  observations. Path containment is unchanged.
+- **Activation is NOT weakened — two independent identities:**
+  `ActivePartitions.coverage_artifact_sha256` and the approved proposal
+  continue to bind the EXACT whole-file bytes (with the clean envelope), and
+  `_verify_structural_artifacts()` now enforces both guarantees separately:
+  (1) live file SHA equals the SHA bound by the active configuration and
+  embedded in the proposal; (2) the recomputed substance digest equals the
+  digest bound by the evidence matrix. The two are deliberately never
+  compared with each other. The coverage artifact must still pass the strict
+  substantive Good Friday checks and the clean/current envelope checks.
+- **Policy re-bound:** `research_eligibility.yaml`
+  `meta.evidence_matrix_sha256` updated to the revised matrix SHA
+  `f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250`.
+  Unchanged: the same ten quarantine dates, every evidence state
+  `PENDING_EVIDENCE`, lifecycle `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`,
+  the provisional/quarantined calendar state, and the policy's membership of
+  `effective_config_hash()`. Calendar overrides untouched; no evidence
+  reinterpreted.
+- **Tests:** full suite **985/985 pass** (was 938). New
+  `TestCoverageSubstanceDigest` proves: each of the eight envelope fields
+  individually leaves the digest unchanged; JSON indentation and key order
+  leave it unchanged; nine substantive top-level fields each change it; five
+  session-level fields each change it; adding or removing a session changes
+  it; an embedded self-digest is excluded; malformed documents and
+  non-finite values are refused; the identifier is versioned; and the live
+  matrix declares exactly the live artifact's digest with no
+  `artifact_sha256` remaining. Cross-check tests prove envelope-only
+  regeneration validates, a substantive change fails, missing/unknown
+  algorithm and missing/malformed digests fail, and a matching digest still
+  does not buy trust in a wrong per-date observation. Activation tests prove
+  the exact whole-file SHA is still rejected when wrong even though the
+  substance digest matches, and that the two identities are checked
+  independently. Per the review instruction, the test asserting the live
+  closeout artifacts lack a clean envelope was REPLACED by a synthetic
+  legacy fixture, and the live-corpus proposal test now asserts the actual
+  current state instead of assuming a legacy envelope.
+- **Verified before commit:** revised matrix validates; all 26 per-date
+  observations pass; the policy resolves exactly the same ten pending dates;
+  disposition `PENDING_DATES_QUARANTINED`; calendar
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`; 10 quarantined / 8 excluded /
+  309 eligible DEV; coverage 516; MBO 77/30; zero spanning; eight causal
+  rolls; no raw or evidence file changed; no `partitions_active.yaml`.
+  New effective config hash
+  `48c2d27ad59d14ecfda4b35690ee1ca5e6c56fedd2e8aa04380309763aa10ce5`
+  (the policy re-bind), so the 12 artifacts are regenerated from the
+  remediation commit in the following step.
+- **Commit:** this entry belongs to the remediation implementation commit;
+  the subsequent artifact stamping is recorded separately in AL-0054.
+  Nothing pushed.

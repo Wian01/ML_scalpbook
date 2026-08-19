@@ -323,17 +323,41 @@ def _verify_structural_artifacts(parts: "ActivePartitions", matrix,
                 f"active configuration {attr} does not equal the identity "
                 "embedded in the approved partition proposal; failing closed"
             )
-    # ONE truth for coverage: the matrix-verified identity must equal the
-    # identity bound by the active configuration.
-    matrix_cov = (matrix.meta or {}).get("observed_reference", {}).get(
-        "artifact_sha256"
+    # TWO independent coverage guarantees, deliberately NOT compared to each
+    # other (they are different identities with different purposes):
+    #   1. EXACT whole-file bytes — already checked above against
+    #      ActivePartitions and the approved proposal (provenance identity);
+    #   2. versioned SUBSTANCE digest — the observation evidence the
+    #      evidence matrix binds, recomputed here from the live bytes.
+    import json as _json
+
+    from nqresearch.calendar_evidence import (
+        COVERAGE_SUBSTANCE_ALGORITHM,
+        coverage_substance_sha256,
     )
-    if matrix_cov is None or str(matrix_cov).lower() != \
-            parts.coverage_artifact_sha256:
+
+    ref = (matrix.meta or {}).get("observed_reference", {})
+    if ref.get("substance_digest_algorithm") != COVERAGE_SUBSTANCE_ALGORITHM:
         raise PartitionsNotActiveError(
-            "the coverage identity bound by the active configuration does "
-            "not equal the identity verified through the evidence matrix; "
+            "evidence matrix declares substance digest algorithm "
+            f"{ref.get('substance_digest_algorithm')!r}, expected "
+            f"{COVERAGE_SUBSTANCE_ALGORITHM!r}; failing closed"
+        )
+    declared_substance = ref.get("substance_sha256")
+    if not _is_sha256_hex(declared_substance):
+        raise PartitionsNotActiveError(
+            "evidence matrix has no valid coverage substance digest; "
             "failing closed"
+        )
+    cov_doc = _json.loads(
+        (close / "mbp1_full_history_coverage.json").read_text(encoding="utf-8")
+    )
+    recomputed = coverage_substance_sha256(cov_doc)
+    if recomputed != str(declared_substance).lower():
+        raise PartitionsNotActiveError(
+            "live coverage substance digest does not equal the digest bound "
+            f"by the evidence matrix (declared {declared_substance[:12]}…, "
+            f"recomputed {recomputed[:12]}…); failing closed"
         )
 
 

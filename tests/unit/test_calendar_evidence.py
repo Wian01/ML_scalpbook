@@ -408,35 +408,235 @@ class TestObservedCrossCheck:
             verify_observed_against_coverage(
                 EvidenceMatrix(**doc), self._cov_path(data_root))
 
-    def test_changed_coverage_bytes_fail_identity_check(self, tmp_path):
-        # The artifact stays STRUCTURALLY usable (same sessions) but its
-        # bytes — and therefore its hash — differ from the declared
-        # identity: the identity check must fail closed BEFORE any per-date
-        # comparison could succeed.
+    def test_substantive_coverage_change_fails_digest_check(self, tmp_path):
+        # A substantive change invalidates the substance digest, and that is
+        # detected BEFORE any per-date comparison could succeed.
         import json
 
         doc, evid, _ = _build(tmp_path)
         data_root = tmp_path / "dataroot"
         p = fx.write_coverage_for(data_root, doc)
         cov = json.loads(p.read_text())
-        cov["extra_note"] = "rewritten but structurally compatible"
+        cov["extra_note"] = "materially different coverage result"
         p.write_text(json.dumps(cov))
         with pytest.raises(CalendarEvidenceError,
-                           match="identity mismatch"):
+                           match="SUBSTANCE digest mismatch"):
             verify_observed_against_coverage(
                 EvidenceMatrix(**doc), self._cov_path(data_root))
 
-    @pytest.mark.parametrize("bad", [None, "nothex", "ab" * 16])
-    def test_missing_or_invalid_declared_artifact_sha_fails(self, tmp_path,
-                                                            bad):
+    def test_envelope_only_regeneration_still_validates(self, tmp_path):
+        # THE circularity fix: regenerating coverage with a new commit,
+        # config hash and code hash must NOT invalidate the matrix.
+        import json
+
+        doc, evid, _ = _build(tmp_path)
+        data_root = tmp_path / "dataroot"
+        p = fx.write_coverage_for(data_root, doc)
+        cov = json.loads(p.read_text())
+        cov.update({"git_sha": "b" * 40, "config_hash": "c" * 64,
+                    "audit_code_hash": "d" * 64,
+                    "generated_at_utc": "2099-01-01T00:00:00Z",
+                    "generation_git_clean": True,
+                    "restamp_note": "regenerated", "data_root": "X:\\other",
+                    "nqresearch_version": "9.9.9"})
+        p.write_text(json.dumps(cov, indent=4))   # also different formatting
+        verify_observed_against_coverage(
+            EvidenceMatrix(**doc), self._cov_path(data_root))  # must not raise
+
+    @pytest.mark.parametrize("bad", [None, "nothex", "ab" * 16, 5, ""])
+    def test_missing_or_invalid_substance_digest_fails(self, tmp_path, bad):
         doc, evid, _ = _build(tmp_path)
         data_root = tmp_path / "dataroot"
         fx.write_coverage_for(data_root, doc)
-        doc["meta"]["observed_reference"]["artifact_sha256"] = bad
-        with pytest.raises(CalendarEvidenceError,
-                           match="artifact_sha256"):
+        doc["meta"]["observed_reference"]["substance_sha256"] = bad
+        with pytest.raises(CalendarEvidenceError, match="substance_sha256"):
             verify_observed_against_coverage(
                 EvidenceMatrix(**doc), self._cov_path(data_root))
+
+    @pytest.mark.parametrize("algo", [None, "", "coverage-substance-v0",
+                                      "sha256", 1])
+    def test_missing_or_unknown_digest_algorithm_fails(self, tmp_path, algo):
+        doc, evid, _ = _build(tmp_path)
+        data_root = tmp_path / "dataroot"
+        fx.write_coverage_for(data_root, doc)
+        doc["meta"]["observed_reference"]["substance_digest_algorithm"] = algo
+        with pytest.raises(CalendarEvidenceError,
+                           match="substance_digest_algorithm"):
+            verify_observed_against_coverage(
+                EvidenceMatrix(**doc), self._cov_path(data_root))
+
+    def test_matching_digest_but_wrong_per_date_observation_still_fails(
+            self, tmp_path):
+        # A valid digest must not buy trust in the per-date claims: they are
+        # still checked individually.
+        doc, evid, _ = _build(tmp_path)
+        data_root = tmp_path / "dataroot"
+        fx.write_coverage_for(data_root, doc)
+        # digest was computed from the artifact; now corrupt only the MATRIX
+        doc["dates"][0]["observed"]["rth_span_seconds"] = 4242.0
+        with pytest.raises(CalendarEvidenceError, match="span mismatch"):
+            verify_observed_against_coverage(
+                EvidenceMatrix(**doc), self._cov_path(data_root))
+
+
+class TestCoverageSubstanceDigest:
+    """coverage-substance-v1: deterministic, envelope-independent, and
+    sensitive to every substantive field."""
+
+    def _doc(self):
+        return {
+            "artifact": "mbp1_full_history_coverage", "status": "WARN",
+            "generated_at_utc": "2026-08-19T00:00:00Z",
+            "nqresearch_version": "0.1.0", "git_sha": "a" * 40,
+            "generation_git_clean": True, "restamp_note": "note",
+            "audit_code_hash": "b" * 64, "config_hash": "c" * 64,
+            "data_root": "D:\\nq-research\\data",
+            "n_expected_complete_sessions": 516, "n_fail": 0, "n_warn": 8,
+            "missing_sessions": [], "cross_file_order_violations": 0,
+            "missing_pre_rth_short_sessions": ["2025-04-18"],
+            "checks": [{"check": "no_session_fails", "status": "PASS"}],
+            "sessions": [
+                {"session_id": "2024-08-19", "rth_span_seconds": 23400.0,
+                 "expected_rth_span_seconds": 23400,
+                 "calendar_status": "normal", "qa_status": "PASS"},
+                {"session_id": "2024-08-20", "rth_span_seconds": 23400.0,
+                 "expected_rth_span_seconds": 23400,
+                 "calendar_status": "normal", "qa_status": "PASS"},
+            ],
+        }
+
+    @pytest.mark.parametrize("field", [
+        "generated_at_utc", "nqresearch_version", "git_sha",
+        "generation_git_clean", "restamp_note", "audit_code_hash",
+        "config_hash", "data_root",
+    ])
+    def test_envelope_fields_do_not_change_the_digest(self, field):
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        base = self._doc()
+        before = coverage_substance_sha256(base)
+        mutated = dict(base)
+        mutated[field] = "ZZZ-changed" if field != "generation_git_clean" \
+            else False
+        assert coverage_substance_sha256(mutated) == before
+
+    def test_json_formatting_and_key_order_do_not_change_the_digest(self):
+        import json
+
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        base = self._doc()
+        before = coverage_substance_sha256(base)
+        reordered = dict(reversed(list(base.items())))
+        assert coverage_substance_sha256(reordered) == before
+        round_tripped = json.loads(json.dumps(base, indent=7))
+        assert coverage_substance_sha256(round_tripped) == before
+
+    @pytest.mark.parametrize("field,value", [
+        ("artifact", "something_else"),
+        ("status", "PASS"),
+        ("n_expected_complete_sessions", 515),
+        ("n_fail", 1),
+        ("n_warn", 9),
+        ("missing_sessions", ["2025-05-05"]),
+        ("cross_file_order_violations", 1),
+        ("missing_pre_rth_short_sessions", ["2099-12-31"]),
+        ("checks", [{"check": "other", "status": "WARN"}]),
+    ])
+    def test_substantive_fields_change_the_digest(self, field, value):
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        base = self._doc()
+        mutated = dict(base)
+        mutated[field] = value
+        assert coverage_substance_sha256(mutated) != \
+            coverage_substance_sha256(base)
+
+    @pytest.mark.parametrize("key,value", [
+        ("session_id", "2099-01-01"),
+        ("rth_span_seconds", 12600.0),
+        ("expected_rth_span_seconds", 12600),
+        ("calendar_status", "shortened"),
+        ("qa_status", "WARN"),
+    ])
+    def test_session_level_changes_change_the_digest(self, key, value):
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        base = self._doc()
+        before = coverage_substance_sha256(base)
+        mutated = self._doc()
+        mutated["sessions"][0][key] = value
+        assert coverage_substance_sha256(mutated) != before
+
+    def test_adding_or_removing_a_session_changes_the_digest(self):
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        base = self._doc()
+        before = coverage_substance_sha256(base)
+        added = self._doc()
+        added["sessions"].append({"session_id": "2024-08-21",
+                                  "rth_span_seconds": 23400.0})
+        removed = self._doc()
+        removed["sessions"].pop()
+        assert coverage_substance_sha256(added) != before
+        assert coverage_substance_sha256(removed) != before
+
+    def test_embedded_self_digest_is_excluded(self):
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        base = self._doc()
+        before = coverage_substance_sha256(base)
+        with_self = dict(base)
+        with_self["coverage_substance_sha256"] = before
+        assert coverage_substance_sha256(with_self) == before
+
+    @pytest.mark.parametrize("bad", [None, [], "text", 42, {"": None}])
+    def test_malformed_documents_rejected(self, bad):
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        if isinstance(bad, dict):
+            # dict of only-envelope keys is empty after filtering
+            bad = {"git_sha": "x", "config_hash": "y"}
+        with pytest.raises(CalendarEvidenceError):
+            coverage_substance_sha256(bad)
+
+    def test_non_finite_values_rejected(self):
+        from nqresearch.calendar_evidence import coverage_substance_sha256
+
+        base = self._doc()
+        base["sessions"][0]["rth_span_seconds"] = float("nan")
+        with pytest.raises(CalendarEvidenceError,
+                           match="not strictly serialisable"):
+            coverage_substance_sha256(base)
+
+    def test_algorithm_identifier_is_versioned(self):
+        from nqresearch.calendar_evidence import COVERAGE_SUBSTANCE_ALGORITHM
+
+        assert COVERAGE_SUBSTANCE_ALGORITHM == "coverage-substance-v1"
+
+    def test_live_matrix_declares_the_versioned_digest_of_the_live_artifact(
+            self):
+        import json
+
+        import yaml as _yaml
+
+        from nqresearch import paths
+        from nqresearch.calendar_evidence import (
+            COVERAGE_SUBSTANCE_ALGORITHM,
+            coverage_substance_sha256,
+        )
+        from nqresearch.config import _repo_root
+
+        m = _yaml.safe_load(
+            (_repo_root() / "config" / "data" / "cme_calendar_evidence.yaml")
+            .read_text(encoding="utf-8"))
+        ref = m["meta"]["observed_reference"]
+        assert ref["substance_digest_algorithm"] == COVERAGE_SUBSTANCE_ALGORITHM
+        assert "artifact_sha256" not in ref  # live whole-file binding removed
+        cov = json.loads(
+            (paths.data_root() / "qa" / "m0_closeout"
+             / "mbp1_full_history_coverage.json").read_text(encoding="utf-8"))
+        assert ref["substance_sha256"] == coverage_substance_sha256(cov)
 
 
 class TestEmailSubstantiveVerification:

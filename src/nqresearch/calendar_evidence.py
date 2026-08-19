@@ -775,13 +775,100 @@ def resolve_activation_disposition(matrix: EvidenceMatrix,
     return DISPOSITION_PENDING_DATES_QUARANTINED
 
 
+# --------------------------------------------------------------------------
+# Versioned coverage-SUBSTANCE digest.
+#
+# The evidence matrix asserts OBSERVED FACTS (which sessions exist and their
+# RTH spans). Binding those claims to the coverage artifact's whole-file
+# SHA-256 proved circular: the file's provenance envelope contains the
+# effective config hash, which contains the research-eligibility policy,
+# which binds the matrix, which bound the file hash — so an envelope-only
+# regeneration invalidated the matrix and could never be re-bound (AL-0052).
+#
+# The substance digest binds exactly what the matrix needs: every
+# non-envelope field of the artifact, including the artifact type, all
+# corpus/accounting fields and the complete per-session observations. The
+# eight provenance-envelope fields owned by qa/report.py are excluded, so an
+# envelope-only regeneration does NOT invalidate the observation evidence,
+# while ANY substantive change does. The artifact's exact whole-file
+# identity remains separately and independently bound at ACTIVATION
+# (ActivePartitions + the approved proposal) — two identities, two purposes.
+# --------------------------------------------------------------------------
+COVERAGE_SUBSTANCE_ALGORITHM = "coverage-substance-v1"
+
+# Excluded: provenance-envelope fields owned by nqresearch.qa.report.
+_COVERAGE_ENVELOPE_FIELDS = frozenset({
+    "generated_at_utc",
+    "nqresearch_version",
+    "git_sha",
+    "generation_git_clean",
+    "restamp_note",
+    "audit_code_hash",
+    "config_hash",
+    "data_root",
+})
+# Also excluded: an informational copy of the digest, so the digest can
+# never include itself if one is later embedded in the artifact.
+_COVERAGE_SELF_DIGEST_FIELDS = frozenset({
+    "coverage_substance_sha256",
+    "substance_sha256",
+})
+
+
+def coverage_substance_sha256(document) -> str:
+    """Deterministic ``coverage-substance-v1`` digest of a coverage artifact.
+
+    INCLUDED: every field except the eight provenance-envelope fields and an
+    informational self-digest field — i.e. the artifact type, all
+    corpus/accounting fields, checks, warnings, classifications and the full
+    per-session observations.
+    EXCLUDED: generated_at_utc, nqresearch_version, git_sha,
+    generation_git_clean, restamp_note, audit_code_hash, config_hash,
+    data_root (plus any embedded copy of this digest).
+
+    Canonicalised with sorted keys, fixed separators, ASCII escaping and
+    strict JSON (non-finite values rejected), so indentation, key order and
+    envelope-only changes cannot alter it.
+    """
+    import json
+
+    if not isinstance(document, dict):
+        raise CalendarEvidenceError(
+            "coverage substance digest requires a JSON object; failing closed"
+        )
+    payload = {
+        k: v for k, v in document.items()
+        if k not in _COVERAGE_ENVELOPE_FIELDS
+        and k not in _COVERAGE_SELF_DIGEST_FIELDS
+    }
+    if not payload:
+        raise CalendarEvidenceError(
+            "coverage artifact has no substantive fields; failing closed"
+        )
+    try:
+        canonical = json.dumps(payload, sort_keys=True,
+                               separators=(",", ":"), ensure_ascii=True,
+                               allow_nan=False)
+    except (TypeError, ValueError) as e:
+        raise CalendarEvidenceError(
+            f"coverage artifact is not strictly serialisable ({e}); "
+            "failing closed"
+        ) from e
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def verify_observed_against_coverage(matrix: EvidenceMatrix,
                                      coverage_path: Path) -> None:
     """Cross-check every transcribed observed block against the live
-    coverage artifact. The artifact's IDENTITY is enforced first: the matrix
-    must declare the artifact's SHA-256 and the actual bytes must match it —
-    only then are per-date observed fields compared. Fabricated observed
-    claims and swapped/edited artifacts both fail here."""
+    coverage artifact.
+
+    The artifact's SUBSTANCE identity is enforced first: the matrix declares
+    a versioned substance digest, which is RECOMPUTED from the live bytes
+    (never trusted from any value inside the artifact) and compared before
+    any per-date claim is trusted. Only then are the per-date observations
+    checked. Envelope-only regeneration keeps the digest stable; any
+    substantive change invalidates it.
+    """
     import json
 
     if not coverage_path.is_file():
@@ -789,23 +876,34 @@ def verify_observed_against_coverage(matrix: EvidenceMatrix,
             f"coverage artifact missing: {coverage_path}; observed evidence "
             "unverifiable; failing closed"
         )
-    declared = (matrix.meta or {}).get("observed_reference", {}).get(
-        "artifact_sha256"
-    )
-    if not _is_sha256_hex(declared):
+    ref = (matrix.meta or {}).get("observed_reference", {})
+    algorithm = ref.get("substance_digest_algorithm")
+    if algorithm != COVERAGE_SUBSTANCE_ALGORITHM:
         raise CalendarEvidenceError(
-            "matrix meta.observed_reference.artifact_sha256 missing or not "
-            "a valid SHA-256; observed evidence unbindable; failing closed"
-        )
-    actual = hashlib.sha256(coverage_path.read_bytes()).hexdigest()
-    if actual != declared.lower():
-        raise CalendarEvidenceError(
-            "coverage artifact identity mismatch (declared "
-            f"{declared[:12]}…, actual {actual[:12]}…): the observed "
-            "evidence was transcribed from a different artifact version; "
+            "matrix meta.observed_reference.substance_digest_algorithm is "
+            f"{algorithm!r}, expected {COVERAGE_SUBSTANCE_ALGORITHM!r}; "
             "failing closed"
         )
-    doc = json.loads(coverage_path.read_text(encoding="utf-8"))
+    declared = ref.get("substance_sha256")
+    if not _is_sha256_hex(declared):
+        raise CalendarEvidenceError(
+            "matrix meta.observed_reference.substance_sha256 missing or not "
+            "a valid SHA-256; observed evidence unbindable; failing closed"
+        )
+    try:
+        doc = json.loads(coverage_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise CalendarEvidenceError(
+            f"coverage artifact unparseable ({e}); failing closed"
+        ) from e
+    actual = coverage_substance_sha256(doc)
+    if actual != declared.lower():
+        raise CalendarEvidenceError(
+            "coverage SUBSTANCE digest mismatch (declared "
+            f"{declared[:12]}…, recomputed {actual[:12]}…): the observed "
+            "evidence was transcribed from materially different coverage "
+            "results; failing closed"
+        )
     by_session = {s.get("session_id"): s for s in doc.get("sessions", [])}
     for d in matrix.dates:
         iso = d.date.isoformat()
