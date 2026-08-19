@@ -1926,3 +1926,108 @@ in by the entry that creates the initial commit.
 - **Files changed:** `src/nqresearch/sources.py`,
   `tests/unit/test_require_provenance.py`.
 - **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0046 — Provenance restamp: acquisition evidence regenerated from a clean committed tree; require_provenance() PASSES
+
+- **Category:** artifact regeneration + provenance re-binding (the reviewed
+  commit-and-restamp sequence). All earlier entries, including AL-0038
+  through AL-0045, are unchanged.
+- **Immutable implementation commit:**
+  `a88d51d2796fc874c2ca675aced57c3e97d29a6f` — "Provenance: clean committed
+  artifact envelopes and ancestral Git binding" (8 files, +655/-13,
+  containing AL-0043, AL-0044 and AL-0045). Never amended; this entry is
+  the separate audit-log-only second commit.
+- **Pre-regeneration state:** full suite 462/462 pass; `git diff --check`
+  clean; exactly the eight reviewed paths committed; working tree verified
+  COMPLETELY clean before any artifact was written, so the new envelope
+  layer could legitimately stamp `generation_git_clean: true`.
+- **Regeneration sequence (reviewed dependency order):**
+  `nqr data audit --part mbp1-acquisition` (gate transiently FAIL while the
+  record-level evidence was still bound to the previous code/config — the
+  expected intermediate state), then
+  `nqr data audit --part mbp1-overlap-records`, which re-decoded both
+  copies of every overlap pair (the cache key includes the acquisition-code
+  and config hashes, both of which had changed) and finished with the gate
+  PASS.
+- **Final acquisition artifacts (8), SHA-256 and status:**
+  - `544d2a8b693f89262d741e0de212dde9ac4bcedd9693bf7eddc0b98920603794`
+    PASS  mbp1_acquisition_gate.json
+  - `c5d65d8d666ed9600fadd1203fc63e7cd53daf952697e6775ba96042c4cd5a2d`
+    PASS  mbp1_manifest_validation.json
+  - `92cb6062bca7c9302cc1c81624130ce932bcb97ec7069de2df4b25d35d3dc9d6`
+    PASS  mbp1_range_adjacency.json
+  - `6c29921ced19d5a8c6cc31f393c9569cdeae6711718c3adafa8d52d36eeaa069`
+    WARN  mbp1_sample_overlap.json (file-level; explained)
+  - `8d63f08d2027d1de20b30acd6741b1a6195e66ef2216fb5e7f55ef5cb63d01dc`
+    PASS  mbp1_sample_overlap_record_level.json
+  - `e263cf85f54caa9793aafdd048f18552c9c8a416eeff35843196520c08c503e9`
+    WARN  mbp1_source_inventory.json (vendor-degraded dates)
+  - `9ff5f80eb0be0f01392633b787ec20a3cb9015721550c9c11dfe09ec5adf6141`
+    PASS  mbp1_source_selection.json
+  - `bef7fb04b26fd2b8df365a16bfa8fc4e4cebe78713d641e6f37fdf6fd0774cd3`
+    WARN  storage_gate.json (below preferred headroom, above required)
+- **Shared envelope bindings — identical across all eight artifacts:**
+  - `git_sha` = `a88d51d2796fc874c2ca675aced57c3e97d29a6f` (exactly the
+    immutable implementation commit);
+  - `generation_git_clean` = boolean `true` (not a string);
+  - `restamp_note` = "Generated from a clean committed tree at the recorded
+    git_sha." — dynamically produced by the envelope layer and accurate;
+    the previous hard-coded "uncommitted working tree" text is gone;
+  - `config_hash` =
+    `2dccccbd76daeb90f021faf3ddcc65efddc1067788892ac661635b675ac0e347`;
+  - `audit_code_hash` (package source) =
+    `69dbf5e6b7cfa01ad30447ec6d35cf7d7e8a90a928e24cf0f63b0f096e9e589b`;
+  - `data_root` = `D:\nq-research\data`; `nqresearch_version` = 0.1.0.
+  The gate's `acquisition_code_hash` binding =
+  `3c023be573a48195fdbf6fa0800e3248c1052fb98c4adda6a5362effc430a33c`,
+  equal to the current `acquisition_code_hash()`.
+- **Acquisition gate: PASS with all 9 named checks PASS** —
+  inventory_completed, manifests_verified, ranges_adjacent, selection_valid,
+  overlap_file_level_explained, record_level_identity,
+  record_evidence_bound_to_current_config,
+  record_evidence_bound_to_current_code,
+  record_evidence_bound_to_current_manifests.
+- **Substantive results reproduced exactly:**
+  - manifest validation **642/642 files checked, zero failures**, zero
+    unmanifested and zero zero-size files across all three jobs
+    (P3KX4KXDQF 314/314, S9GCQWS6L8 315/315, N8HD86YKNS 13/13);
+  - record-level overlap **11/11 pairs, 115,583,040 records compared, all
+    identical** (PASS);
+  - range adjacency PASS (the two annual jobs exactly adjacent, zero
+    issues);
+  - source selection PASS: 625 research files, 2 canonical owners, unique
+    partitions, **zero sample files leaked into the research input** and
+    zero partitions owned by non-eligible sources;
+  - inventory WARN solely from the 11 understood vendor-degraded dates
+    (1 in P3KX4KXDQF: 2024-09-18; 10 in S9GCQWS6L8), zero metadata
+    problems, all manifest hashes matching the registry;
+  - sample-overlap file-level WARN remains the documented expected result
+    (cross-request DBN container metadata differs by design; the
+    record-level comparison is the authoritative identity check);
+  - storage WARN: 1,720.8 GB free — **above the 1,000 GB required
+    minimum**, below the 2,000 GB preferred headroom.
+- **Live `require_provenance()` PASSES** with HEAD at the implementation
+  commit: gate PASS, `git_sha` a88d51d2…, `generation_git_clean` true — the
+  first successful provenance acceptance since the envelope hardening.
+- **Post-regeneration verification:** full suite **462/462 pass**; raw
+  vendor data unchanged (1,453 files, newest mtime 2026-08-17, i.e.
+  untouched by this session); all 45 calendar evidence files unchanged
+  (GCC email still `67adfa61…`); evidence matrix still `89cc29fd…`;
+  coverage artifact still `03545b61…`; no `partitions_active.yaml`; no
+  HOLDOUT/FORWARD access; no normalization/features/labels/datasets/samples
+  directories exist; no data path is tracked in Git.
+- **The four historical `qa/m0_closeout/` artifacts were deliberately
+  PRESERVED and verified byte-identical** to their pre-run hashes:
+  `a1e2849f…` mbo_blocks_frozen.json, `4b6095e9…`
+  mbp1_front_contract_series.json, `03545b61…`
+  mbp1_full_history_coverage.json, `8c0d62b2…` partition_proposal.json.
+  They remain historical evidence of the closeout and intentionally carry
+  the older envelope (no `generation_git_clean` field); regenerating them
+  is a separate reviewed decision.
+- **Partitions remain INACTIVE** (`activation_ready=false`, no
+  `partitions_active.yaml`); the calendar evidence state is unchanged
+  (8 DOCUMENT_VERIFIED / 8 TRIANGULATED / 10 PENDING_EVIDENCE / 0
+  conflicts, PROVISIONAL_DOCUMENT_VERIFICATION_PENDING). No raw or evidence
+  data changed.
+- **Commit:** this entry is the audit-log-only second commit; nothing
+  pushed.
