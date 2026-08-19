@@ -29,6 +29,8 @@ SYNTH = {
     },
     "partition_proposal_sha256": "a" * 64,
     "effective_calendar_sha256": "b" * 64,
+    "evidence_matrix_sha256": "e" * 64,
+    "cme_correspondence_sha256": "f" * 64,
     "dev": {"start": "2099-01-05", "end": "2099-03-31"},
     "selection": {"start": "2099-04-01", "end": "2099-05-29"},
     "holdout": {"start": "2099-06-01", "end": "2099-08-31"},
@@ -86,6 +88,8 @@ class TestFailClosed:
                       "approved_at_utc": "2099-01-01T00:00:00+02:00"}},  # non-UTC
         {"partition_proposal_sha256": "nothex"},
         {"effective_calendar_sha256": ""},
+        {"evidence_matrix_sha256": "nothex"},           # PA-0001 binding
+        {"cme_correspondence_sha256": ""},              # PA-0001 binding
         {"holdout": {"start": "2099-03-01", "end": "2099-03-15"}},  # non-chrono
         {"dev": {"start": "2099-03-31", "end": "2099-01-05"}},      # inverted
         {"unexpected_extra": True},                                  # extra field
@@ -199,15 +203,19 @@ MANDATORY = ["boundaries_on_trading_days", "partition_ranges_contiguous",
 
 
 class TestActivationEvidence:
-    def _synthetic_repo(self, tmp_path, baseline_status="DOCUMENT_VERIFIED",
-                        groups=None, with_evidence=True):
-        """Synthetic repo root with real calendar baseline + custom overrides
-        whose baseline_verification content is controllable."""
+    def _synthetic_repo(self, tmp_path, overrides_status=None, groups=None,
+                        matrix_doc=None, data_root=None, jan9_ref=None):
+        """Synthetic repo root: real calendar baseline + a synthetic
+        date-level evidence matrix (PA-0001) + coherent overrides."""
         import shutil
 
         import yaml as _yaml
 
+        import conftest as fx
         from nqresearch.calendar import clear_calendar_cache
+        from nqresearch.calendar_evidence import (
+            CALENDAR_EVIDENCE_COMPLETE_STATE,
+        )
         from nqresearch.config import _repo_root
         from nqresearch.holdout import EXPECTED_BASELINE_GROUPS
 
@@ -217,54 +225,77 @@ class TestActivationEvidence:
         (root / "pyproject.toml").write_text("[project]\nname='x'\n")
         shutil.copy(_repo_root() / "config" / "data" / "cme_calendar.yaml",
                     root / "config" / "data" / "cme_calendar.yaml")
+        data_root = data_root or (tmp_path / "dataroot")
+        if matrix_doc is None:
+            matrix_doc, _ = fx.synthetic_matrix_doc(
+                data_root / "reference" / "cme_calendar")
+        # coverage first: it binds the artifact SHA into the matrix doc
+        fx.write_coverage_for(data_root, matrix_doc)
+        fx.write_matrix(root, matrix_doc)
         if groups is None:
-            groups = [
-                {"holiday_group": name, "status": baseline_status,
-                 **({"source_reference": "CME schedule (synthetic)",
-                     "document_sha256": "e" * 64} if with_evidence else {})}
-                for name in sorted(EXPECTED_BASELINE_GROUPS)
-            ]
+            groups = fx.overrides_groups_for(matrix_doc,
+                                             EXPECTED_BASELINE_GROUPS)
+        meta = {"baseline_verification": {
+            "status": overrides_status or CALENDAR_EVIDENCE_COMPLETE_STATE,
+            "groups": groups}}
+        if jan9_ref is not None:
+            meta["references"] = [jan9_ref]
         doc = {
-            "meta": {"baseline_verification": {"status": baseline_status,
-                                               "groups": groups}},
+            "meta": meta,
             "early_close_overrides": {"2025-01-09": "08:30"},
         }
         (root / "config" / "data" / "cme_calendar_overrides.yaml").write_text(
             _yaml.safe_dump(doc)
         )
         clear_calendar_cache()
-        return root
+        return root, data_root
 
     def _evidence_env(self, tmp_path, proposal_doc, declared_sha=None,
-                      baseline_status="DOCUMENT_VERIFIED", groups=None,
-                      with_evidence=True, audit_entry=True):
+                      overrides_status=None, groups=None, matrix_doc=None,
+                      audit_entry=True, audit_omit=(), jan9_ref=None,
+                      wrong_matrix_sha=False, wrong_email_sha=False):
         import hashlib
         import json as _json
 
         from nqresearch.calendar import calendar_identity
+        from nqresearch.calendar_evidence import matrix_file_sha256
 
-        repo_root = self._synthetic_repo(tmp_path, baseline_status,
-                                         groups, with_evidence)
-        data_root = tmp_path / "dataroot"
-        (data_root / "qa" / "m0_closeout").mkdir(parents=True)
+        repo_root, data_root = self._synthetic_repo(
+            tmp_path, overrides_status=overrides_status, groups=groups,
+            matrix_doc=matrix_doc, jan9_ref=jan9_ref)
+        (data_root / "qa" / "m0_closeout").mkdir(parents=True, exist_ok=True)
         ppath = data_root / "qa" / "m0_closeout" / "partition_proposal.json"
         ppath.write_text(_json.dumps(proposal_doc))
         actual_sha = hashlib.sha256(ppath.read_bytes()).hexdigest()
         declared = declared_sha or actual_sha
+        matrix_sha = matrix_file_sha256(repo_root)
+        email_sha = hashlib.sha256(
+            (data_root / "reference" / "cme_calendar" / "email.eml")
+            .read_bytes()).hexdigest()
         # Immutable human-approval evidence: the audit-log entry named by the
-        # approval_reference must cite the approved proposal SHA.
+        # approval_reference must cite the exact proposal, evidence-matrix
+        # and CME-correspondence hashes (PA-0001).
+        cited = {"proposal": declared, "matrix": matrix_sha,
+                 "email": email_sha}
+        for omit in audit_omit:
+            cited.pop(omit)
         log = repo_root / "docs" / "implementation-audit-log.md"
         if audit_entry:
             log.write_text(
                 "# log\n\n## AL-9999 synthetic approval\n\n"
-                f"approved proposal sha256 {declared}\n"
+                + "".join(f"approved {k} sha256 {v}\n"
+                          for k, v in cited.items())
             )
         else:
             log.write_text("# log\n\n## AL-0001 unrelated\n")
         cal_sha = calendar_identity(repo_root)["effective_calendar_sha256"]
         doc = {**SYNTH,
                "partition_proposal_sha256": declared,
-               "effective_calendar_sha256": cal_sha}
+               "effective_calendar_sha256": cal_sha,
+               "evidence_matrix_sha256": ("1" * 64 if wrong_matrix_sha
+                                          else matrix_sha),
+               "cme_correspondence_sha256": ("2" * 64 if wrong_email_sha
+                                             else email_sha)}
         parts = _parts(doc, tmp_path)
         return parts, repo_root, data_root
 
@@ -398,57 +429,159 @@ class TestActivationEvidence:
             _verify_activation_evidence(parts, repo_root, data_root)
 
     def test_missing_expected_group_fails(self, tmp_path):
+        import conftest as fx
         from nqresearch.holdout import (
             EXPECTED_BASELINE_GROUPS,
             _verify_activation_evidence,
         )
 
-        groups = [
-            {"holiday_group": name, "status": "DOCUMENT_VERIFIED",
-             "source_reference": "syn", "document_sha256": "e" * 64}
-            for name in sorted(EXPECTED_BASELINE_GROUPS)[:-1]  # one missing
-        ]
+        matrix_doc, _ = fx.synthetic_matrix_doc(
+            tmp_path / "dataroot" / "reference" / "cme_calendar")
+        groups = fx.overrides_groups_for(
+            matrix_doc, EXPECTED_BASELINE_GROUPS)[:-1]  # one missing
         parts, repo_root, data_root = self._evidence_env(
-            tmp_path, self._proposal(), groups=groups
+            tmp_path, self._proposal(), matrix_doc=matrix_doc, groups=groups
         )
         with pytest.raises(PartitionsNotActiveError, match="nine-group"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
     def test_duplicate_and_unexpected_group_fail(self, tmp_path):
+        import conftest as fx
         from nqresearch.holdout import (
             EXPECTED_BASELINE_GROUPS,
             _verify_activation_evidence,
         )
 
-        base = [
-            {"holiday_group": name, "status": "DOCUMENT_VERIFIED",
-             "source_reference": "syn", "document_sha256": "e" * 64}
-            for name in sorted(EXPECTED_BASELINE_GROUPS)
-        ]
+        matrix_doc, _ = fx.synthetic_matrix_doc(
+            tmp_path / "dataroot" / "reference" / "cme_calendar")
+        base = fx.overrides_groups_for(matrix_doc, EXPECTED_BASELINE_GROUPS)
         dup = base + [dict(base[0])]
         parts, repo_root, data_root = self._evidence_env(
-            tmp_path, self._proposal(), groups=dup
+            tmp_path, self._proposal(), matrix_doc=matrix_doc, groups=dup
         )
         with pytest.raises(PartitionsNotActiveError, match="duplicate"):
             _verify_activation_evidence(parts, repo_root, data_root)
-        extra = base + [{"holiday_group": "Invented Day (2099-01-01)",
-                         "status": "DOCUMENT_VERIFIED",
-                         "source_reference": "syn",
-                         "document_sha256": "e" * 64}]
+        matrix_doc2, _ = fx.synthetic_matrix_doc(
+            (tmp_path / "b") / "dataroot" / "reference" / "cme_calendar")
+        extra = fx.overrides_groups_for(matrix_doc2, EXPECTED_BASELINE_GROUPS)
+        extra = extra + [{"holiday_group": "Invented Day (2099-01-01)",
+                          "status": "DOCUMENT_VERIFIED", "dates": {}}]
         parts2, repo_root2, data_root2 = self._evidence_env(
-            tmp_path / "b", self._proposal(), groups=extra
+            tmp_path / "b", self._proposal(), matrix_doc=matrix_doc2,
+            groups=extra
         )
         with pytest.raises(PartitionsNotActiveError, match="nine-group"):
             _verify_activation_evidence(parts2, repo_root2, data_root2)
 
-    def test_verified_group_without_document_identity_fails(self, tmp_path):
+    def test_rollup_mismatch_fails_even_when_complete(self, tmp_path):
+        # One verified year must NEVER promote a multi-year group: overrides
+        # claiming DOCUMENT_VERIFIED for a group whose conservative matrix
+        # roll-up is weaker (here TRIANGULATED) fail closed even though every
+        # date is resolved.
+        import conftest as fx
+        from nqresearch.calendar_evidence import STATE_TRIANGULATED
+        from nqresearch.holdout import (
+            EXPECTED_BASELINE_GROUPS,
+            _verify_activation_evidence,
+        )
+
+        matrix_doc, _ = fx.synthetic_matrix_doc(
+            tmp_path / "dataroot" / "reference" / "cme_calendar",
+            date_states={"2024-09-02": STATE_TRIANGULATED})
+        groups = fx.overrides_groups_for(matrix_doc, EXPECTED_BASELINE_GROUPS)
+        for g in groups:
+            if g["holiday_group"].startswith("Labor Day"):
+                g["status"] = "DOCUMENT_VERIFIED"  # stronger than roll-up
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), matrix_doc=matrix_doc, groups=groups
+        )
+        with pytest.raises(PartitionsNotActiveError, match="rolls up"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_pending_date_blocks_activation(self, tmp_path):
+        # Partial evidence stays pending: a single unresolved date blocks.
+        import conftest as fx
+        from nqresearch.calendar_evidence import STATE_PENDING
+        from nqresearch.holdout import _verify_activation_evidence
+
+        matrix_doc, _ = fx.synthetic_matrix_doc(
+            tmp_path / "dataroot" / "reference" / "cme_calendar",
+            date_states={"2025-06-19": STATE_PENDING})
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), matrix_doc=matrix_doc
+        )
+        with pytest.raises(PartitionsNotActiveError, match="incomplete"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_wrong_matrix_hash_fails(self, tmp_path):
         from nqresearch.holdout import _verify_activation_evidence
 
         parts, repo_root, data_root = self._evidence_env(
-            tmp_path, self._proposal(), with_evidence=False
+            tmp_path, self._proposal(), wrong_matrix_sha=True
         )
         with pytest.raises(PartitionsNotActiveError,
-                           match="official-document evidence"):
+                           match="evidence matrix"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_wrong_correspondence_hash_fails(self, tmp_path):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), wrong_email_sha=True
+        )
+        with pytest.raises(PartitionsNotActiveError,
+                           match="correspondence"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    @pytest.mark.parametrize("omit", [("matrix",), ("email",),
+                                      ("matrix", "email")])
+    def test_audit_entry_missing_evidence_hashes_fails(self, tmp_path, omit):
+        # Human approval must bind the EXACT evidence hashes, not just the
+        # proposal: an audit entry missing any required hash fails closed.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(), audit_omit=omit
+        )
+        with pytest.raises(PartitionsNotActiveError, match="does not cite"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_tampered_evidence_file_fails(self, tmp_path):
+        # Changed evidence bytes (email or document) fail the hash check.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal()
+        )
+        (data_root / "reference" / "cme_calendar" / "email.eml").write_bytes(
+            b"tampered email"
+        )
+        with pytest.raises(PartitionsNotActiveError, match="hash mismatch"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_missing_coverage_artifact_fails(self, tmp_path):
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal()
+        )
+        (data_root / "qa" / "m0_closeout"
+         / "mbp1_full_history_coverage.json").unlink()
+        with pytest.raises(PartitionsNotActiveError,
+                           match="coverage artifact missing"):
+            _verify_activation_evidence(parts, repo_root, data_root)
+
+    def test_jan9_reference_wrong_hash_fails(self, tmp_path):
+        # A well-formed but wrong Jan-9 document hash must not activate.
+        from nqresearch.holdout import _verify_activation_evidence
+
+        parts, repo_root, data_root = self._evidence_env(
+            tmp_path, self._proposal(),
+            jan9_ref={"id": "cme-2025-01-09-mourning",
+                      "document_sha256": "9" * 64},
+        )
+        with pytest.raises(PartitionsNotActiveError,
+                           match="does not match the verified"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
     def test_unbound_approval_evidence_fails(self, tmp_path):
@@ -486,24 +619,28 @@ class TestActivationEvidence:
         with pytest.raises(PartitionsNotActiveError, match="pending/invalid"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
-    def test_pending_baseline_verification_fails(self, tmp_path):
+    def test_pending_overrides_status_fails(self, tmp_path):
+        # The live overrides status (PROVISIONAL_DOCUMENT_VERIFICATION_
+        # PENDING) must block even when everything else is coherent.
         from nqresearch.holdout import _verify_activation_evidence
 
         parts, repo_root, data_root = self._evidence_env(
             tmp_path, self._proposal(),
-            baseline_status="OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING",
+            overrides_status="PROVISIONAL_DOCUMENT_VERIFICATION_PENDING",
         )
-        with pytest.raises(PartitionsNotActiveError, match="baseline"):
+        with pytest.raises(PartitionsNotActiveError,
+                           match="calendar-evidence status"):
             _verify_activation_evidence(parts, repo_root, data_root)
 
     def test_missing_proposal_artifact_fails(self, tmp_path):
         from nqresearch.holdout import _verify_activation_evidence
 
-        repo_root = self._synthetic_repo(tmp_path)
+        repo_root, data_root = self._synthetic_repo(tmp_path)
         parts = _parts(SYNTH, tmp_path)
+        (data_root / "qa" / "m0_closeout"
+         / "partition_proposal.json").unlink(missing_ok=True)
         with pytest.raises(PartitionsNotActiveError, match="evidence missing"):
-            _verify_activation_evidence(parts, repo_root,
-                                        tmp_path / "empty_dataroot")
+            _verify_activation_evidence(parts, repo_root, data_root)
 
     def test_wrong_calendar_identity_fails(self, tmp_path):
         from nqresearch.holdout import _verify_activation_evidence

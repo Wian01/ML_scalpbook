@@ -12,8 +12,9 @@ outcomes**. A boundary near `2026-04-01` was discussed during planning; Mileston
 has since established exact broad-data coverage (516 expected sessions,
 2024-08-19 → 2026-08-14) and produced a structurally valid HOLDOUT proposal at
 exactly that boundary (2026-04-01 → 2026-08-14) — the proposal remains
-tentative and unactivated pending official-CME document verification and
-explicit human approval (see the Status paragraph below). Any MBO session
+tentative and unactivated pending completion of the PA-0001 date-level
+calendar evidence and explicit human approval (see the Status paragraph
+below). Any MBO session
 falling inside HOLDOUT is itself HOLDOUT and is excluded from all MBO
 discovery and ladder development.
 
@@ -22,10 +23,22 @@ active.** The Milestone 0 closeout (data-spec §6a/§6b, audit-log AL-0028)
 proposes HOLDOUT = 2026-04-01 → 2026-08-14 (98 trading days ≈ 4.5 months,
 31 MBO sessions / 11 whole blocks) with all structural partition gates
 passing; the proposal remains `PROPOSED_NOT_ACTIVE`,
-`PROVISIONAL_DOCUMENT_VERIFICATION_PENDING`, `activation_ready=false` until
-official-CME document verification completes and explicit human approval is
-recorded. Historical note: freezing the dates was a Milestone 0 deliverable
-(canonical §60 items 11–12) and must precede feature research.
+`PROVISIONAL_DOCUMENT_VERIFICATION_PENDING`, `activation_ready=false`.
+Calendar verification follows the **date-level evidence policy PA-0001**
+(docs/protocol-amendments/PA-0001-cme-calendar-evidence-policy.md; data-spec
+§6c), adopted after CME GCC officially confirmed no archive of previous
+years' holiday calendars exists. Activation requires ALL of: every
+exceptional calendar date `DOCUMENT_VERIFIED` or
+`TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE` with no conflicts
+(`config/data/cme_calendar_evidence.yaml`, mechanically validated against
+the immutable evidence files and the live coverage artifact); all
+calendar/MBO-block/partition structural checks PASS; the activation binding
+the exact SHA-256 of the approved proposal, effective calendar, evidence
+matrix and GCC correspondence; and an append-only audit-log entry recording
+explicit human approval of those exact hashes (all enforced fail-closed by
+`nqresearch/holdout.py`). Historical note: freezing the dates was a
+Milestone 0 deliverable (canonical §60 items 11–12) and must precede feature
+research.
 
 ## 2. Prohibitions during ordinary development (§6.3)
 

@@ -87,21 +87,26 @@ class ApprovalRecord(BaseModel):
 class ActivePartitions(BaseModel):
     """Schema of config/data/partitions_active.yaml (does not exist yet).
 
-    An eventual activation must bind to the exact approved proposal and
-    effective calendar identities plus recorded approval evidence.
+    An eventual activation must bind to the exact approved proposal,
+    effective calendar, calendar-evidence matrix and CME archive-
+    unavailability correspondence identities plus recorded approval evidence
+    (PA-0001).
     """
 
     activated: bool
     approval: ApprovalRecord
     partition_proposal_sha256: str  # SHA-256 of the approved proposal artifact
     effective_calendar_sha256: str  # merged-calendar identity at approval time
+    evidence_matrix_sha256: str     # committed cme_calendar_evidence.yaml file
+    cme_correspondence_sha256: str  # immutable GCC archive-unavailability .eml
     dev: PartitionRange
     selection: PartitionRange
     holdout: PartitionRange
 
     model_config = {"extra": "forbid"}
 
-    @field_validator("partition_proposal_sha256", "effective_calendar_sha256")
+    @field_validator("partition_proposal_sha256", "effective_calendar_sha256",
+                     "evidence_matrix_sha256", "cme_correspondence_sha256")
     @classmethod
     def _sha256(cls, v: str) -> str:
         if len(v) != 64 or any(c not in _SHA256_HEX for c in v.lower()):
@@ -160,26 +165,71 @@ def _is_sha256_hex(v) -> bool:
     )
 
 
-def _verify_baseline_calendar_verified(repo_root: Path) -> None:
-    """The official-calendar baseline verification must ACTUALLY be complete
-    against the COMPLETE frozen plan: exactly the nine expected holiday
-    groups, each DOCUMENT_VERIFIED and bound to attributable official-document
-    evidence (source reference + document SHA-256). Any pending declared
-    document identity (e.g. the Jan-9 mourning-day PDF) blocks activation."""
+def _verify_calendar_evidence(
+    parts: "ActivePartitions", repo_root: Path, data_root: Path
+) -> None:
+    """Date-level calendar evidence gate (PA-0001, supersedes the group-level
+    DOCUMENT_VERIFIED-only gate after CME GCC confirmed the historical
+    archive does not exist).
+
+    Activation requires ALL of:
+    - the committed evidence matrix validates against the immutable evidence
+      files AND the live coverage artifact (hash + observed cross-checks);
+    - EVERY exceptional date is DOCUMENT_VERIFIED or
+      TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE — no pending dates, no
+      conflicts;
+    - the active configuration binds the exact matrix file hash and the
+      exact GCC archive-unavailability email hash;
+    - the overrides file's group summaries agree exactly with the matrix
+      (conservative weakest-member roll-ups over the frozen nine groups) and
+      declare the completed policy state;
+    - the Jan-9 mourning reference carries the real PDF hash.
+    """
+    from nqresearch import calendar_evidence as ce
+
+    try:
+        matrix = ce.load_validated_matrix(repo_root, data_root)
+    except ce.CalendarEvidenceError as e:
+        raise PartitionsNotActiveError(str(e)) from e
+    unresolved = ce.unresolved_dates(matrix)
+    if unresolved:
+        raise PartitionsNotActiveError(
+            "calendar evidence is incomplete: every exceptional date must be "
+            "DOCUMENT_VERIFIED or TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE; "
+            f"unresolved: {unresolved}; failing closed"
+        )
+    actual_matrix_sha = ce.matrix_file_sha256(repo_root)
+    if parts.evidence_matrix_sha256 != actual_matrix_sha:
+        raise PartitionsNotActiveError(
+            "activation does not bind the actual calendar evidence matrix "
+            f"(declared {parts.evidence_matrix_sha256[:12]}…, actual "
+            f"{actual_matrix_sha[:12]}…); failing closed"
+        )
+    sources = {s.id: s for s in matrix.sources}
+    email = sources[matrix.archive_unavailability.email_source]
+    email_sha = email.files[0].sha256
+    if parts.cme_correspondence_sha256 != email_sha:
+        raise PartitionsNotActiveError(
+            "activation does not bind the verified CME archive-"
+            "unavailability correspondence hash; failing closed"
+        )
+
     ov_path = repo_root / "config" / "data" / "cme_calendar_overrides.yaml"
     if not ov_path.is_file():
         raise PartitionsNotActiveError(
-            "calendar overrides file missing; baseline verification state "
+            "calendar overrides file missing; calendar evidence state "
             "unknown; failing closed"
         )
     meta = (yaml.safe_load(ov_path.read_text(encoding="utf-8")) or {}).get(
         "meta", {}
     )
     bv = meta.get("baseline_verification", {})
-    if bv.get("status") != "DOCUMENT_VERIFIED":
+    from nqresearch.calendar_evidence import CALENDAR_EVIDENCE_COMPLETE_STATE
+    if bv.get("status") != CALENDAR_EVIDENCE_COMPLETE_STATE:
         raise PartitionsNotActiveError(
-            "official-calendar baseline verification is "
-            f"{bv.get('status')!r}, not DOCUMENT_VERIFIED; failing closed"
+            "overrides calendar-evidence status is "
+            f"{bv.get('status')!r}, not {CALENDAR_EVIDENCE_COMPLETE_STATE}; "
+            "failing closed"
         )
     groups = bv.get("groups", [])
     names = [g.get("holiday_group") for g in groups]
@@ -195,28 +245,40 @@ def _verify_baseline_calendar_verified(repo_root: Path) -> None:
             f"frozen nine-group plan (missing: {sorted(missing)}; "
             f"unexpected: {sorted(extra)}); failing closed"
         )
+    rollups = ce.group_states(matrix)
+    date_states = {d.date.isoformat(): d.state for d in matrix.dates}
     for g in groups:
-        if g.get("status") != "DOCUMENT_VERIFIED":
+        name = g.get("holiday_group")
+        if g.get("status") != rollups.get(name):
             raise PartitionsNotActiveError(
-                f"calendar holiday group {g.get('holiday_group')!r} is not "
-                "DOCUMENT_VERIFIED; failing closed"
+                f"overrides group {name!r} declares status "
+                f"{g.get('status')!r} but the evidence matrix rolls up to "
+                f"{rollups.get(name)!r} (weakest member); failing closed"
             )
-        if not str(g.get("source_reference", "")).strip() or not _is_sha256_hex(
-            g.get("document_sha256")
-        ):
-            raise PartitionsNotActiveError(
-                f"calendar holiday group {g.get('holiday_group')!r} is marked "
-                "verified without attributable official-document evidence "
-                "(source_reference + document_sha256 required); failing closed"
-            )
-    # Every declared document identity in the overrides references must be a
-    # real SHA-256 — the pending Jan-9 identity (null) blocks activation.
+        for iso, st in (g.get("dates") or {}).items():
+            if date_states.get(str(iso)) != st:
+                raise PartitionsNotActiveError(
+                    f"overrides group {name!r} declares {iso} as {st!r} but "
+                    f"the evidence matrix records "
+                    f"{date_states.get(str(iso))!r}; failing closed"
+                )
+    # The Jan-9 mourning reference must carry the REAL official PDF hash.
+    mourning = sources.get("cme-mourning-2025-pdf")
     for ref in meta.get("references", []):
-        if "document_sha256" in ref and not _is_sha256_hex(ref.get("document_sha256")):
-            raise PartitionsNotActiveError(
-                f"override reference {ref.get('id')!r} has a pending/invalid "
-                "document identity; failing closed"
-            )
+        if "document_sha256" in ref:
+            declared = ref.get("document_sha256")
+            if not _is_sha256_hex(declared):
+                raise PartitionsNotActiveError(
+                    f"override reference {ref.get('id')!r} has a pending/"
+                    "invalid document identity; failing closed"
+                )
+            if (ref.get("id") == "cme-2025-01-09-mourning"
+                    and (mourning is None
+                         or declared.lower() != mourning.files[0].sha256)):
+                raise PartitionsNotActiveError(
+                    "override Jan-9 mourning reference hash does not match "
+                    "the verified official PDF evidence; failing closed"
+                )
 
 
 def _verify_approval_bound_to_audit_record(
@@ -224,7 +286,9 @@ def _verify_approval_bound_to_audit_record(
 ) -> None:
     """The claimed immutable human approval must be REAL: the committed
     approval_reference must name an entry in the append-only implementation
-    audit log, and that entry must cite the exact approved proposal SHA."""
+    audit log, and that entry must cite the exact approved proposal SHA, the
+    exact calendar-evidence matrix SHA, and the exact CME archive-
+    unavailability correspondence SHA (PA-0001)."""
     import re
 
     m = re.search(r"AL-\d{3,4}", parts.approval.approval_reference)
@@ -249,12 +313,18 @@ def _verify_approval_bound_to_audit_record(
         )
     nxt = text.find("\n## ", idx + len(heading))
     entry = text[idx: nxt if nxt > 0 else len(text)]
-    if parts.partition_proposal_sha256 not in entry:
-        raise PartitionsNotActiveError(
-            f"audit-log entry {m.group(0)} does not cite the approved "
-            "proposal SHA-256; approval is not bound to this activation; "
-            "failing closed"
-        )
+    required = {
+        "proposal SHA-256": parts.partition_proposal_sha256,
+        "evidence matrix SHA-256": parts.evidence_matrix_sha256,
+        "CME correspondence SHA-256": parts.cme_correspondence_sha256,
+    }
+    for what, sha in required.items():
+        if sha not in entry:
+            raise PartitionsNotActiveError(
+                f"audit-log entry {m.group(0)} does not cite the {what}; "
+                "approval is not bound to this activation's exact evidence; "
+                "failing closed"
+            )
 
 
 def _verify_activation_evidence(
@@ -324,13 +394,15 @@ def _verify_activation_evidence(
             "proposal activation_ready is not true (contradicts the approved "
             "state); failing closed"
         )
-    if cal_state != "DOCUMENT_VERIFIED":
+    from nqresearch.calendar_evidence import CALENDAR_EVIDENCE_COMPLETE_STATE
+    if cal_state not in ("DOCUMENT_VERIFIED", CALENDAR_EVIDENCE_COMPLETE_STATE):
         raise PartitionsNotActiveError(
             "proposal calendar_verification_state is "
-            f"{cal_state!r}, not DOCUMENT_VERIFIED (contradicts the approved "
+            f"{cal_state!r}, not DOCUMENT_VERIFIED or "
+            f"{CALENDAR_EVIDENCE_COMPLETE_STATE} (contradicts the approved "
             "state); failing closed"
         )
-    _verify_baseline_calendar_verified(repo_root)
+    _verify_calendar_evidence(parts, repo_root, data_root)
     _verify_approval_bound_to_audit_record(parts, repo_root)
     prop = doc.get("proposal", {})
     expected = {

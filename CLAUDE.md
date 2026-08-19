@@ -158,8 +158,18 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   PROVISIONAL_DOCUMENT_VERIFICATION_PENDING);
   partition proposal structurally valid but **PROPOSED_NOT_ACTIVE,
   PROVISIONAL_DOCUMENT_VERIFICATION_PENDING, activation_ready=false** —
-  activation requires document-level CME verification + explicit human
-  approval. Current state: `docs/data-specification.md` §6a/§6b.
+  activation requires completion of the PA-0001 date-level calendar
+  evidence + explicit human approval binding the exact evidence hashes.
+  Current state: `docs/data-specification.md` §6a/§6b/§6c.
+- **Calendar evidence policy amended 2026-08-19 (PA-0001,
+  `docs/protocol-amendments/`):** CME GCC confirmed in writing that no
+  archive of previous years' holiday calendars exists. Verification is now
+  DATE-LEVEL over an explicit evidence hierarchy
+  (`config/data/cme_calendar_evidence.yaml` + `nqresearch/calendar_evidence.py`,
+  immutable evidence under `<data_root>/reference/cme_calendar/`). Current:
+  8 dates DOCUMENT_VERIFIED (incl. 2025-01-09 + all seven 2026 dates),
+  8 TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, **10 PENDING_EVIDENCE**,
+  0 conflicts — evidence incomplete, activation still blocked.
 - No features, labels, sampling, models, experiments, activated holdout
   partition, protected holdout dataset, or holdout opening exists yet; only
   the unactivated tentative HOLDOUT proposal exists (data-spec §6a).

@@ -216,11 +216,21 @@ def load_session_config(repo_root: Path | None = None) -> SessionWindowConfig:
 
 
 def effective_config_hash(repo_root: Path | None = None) -> str:
-    """SHA-256 over the effective configuration: parsed values of
-    config/data/*.yaml plus the resolved data root (so an NQR_DATA_ROOT
-    override changes the hash). Any session-timezone/boundary/RTH or data-path
+    """SHA-256 over the ENUMERATED effective configuration inputs — exactly:
+    parsed config/data/paths.yaml (plus the resolved data root, so an
+    NQR_DATA_ROOT override changes the hash), parsed config/data/sessions.yaml,
+    the parsed config/data/mbp1_sources.yaml registry, and the file hashes of
+    config/data/cme_calendar.yaml and config/data/cme_calendar_overrides.yaml.
+    Any session-timezone/boundary/RTH, data-path, source-registry or calendar
     change therefore invalidates config-keyed caches and is visible in QA
-    artifact envelopes."""
+    artifact envelopes.
+
+    Deliberately NOT included: config/data/cme_calendar_evidence.yaml (the
+    PA-0001 calendar evidence matrix). It gates PARTITION ACTIVATION, not
+    data processing, and is bound by its own file SHA-256 inside
+    partitions_active.yaml plus the approving audit-log entry (see
+    nqresearch/holdout.py); including it here would needlessly couple
+    acquisition provenance to evidence-status bookkeeping."""
     import hashlib
     import json
 

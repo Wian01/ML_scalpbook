@@ -391,8 +391,9 @@ validation. Current storage status: §5.5.)*
   trading days 2024-08-01 → 2026-12-31; Christmas/New Year full closures; 25
   early closes incl. **08:15 CT Good Friday short sessions** — all 25 early
   closes cross-checked observationally against decoded coverage (25/25
-  consistent); document-level verification of each holiday PDF remains an
-  open review item.
+  consistent); document-level verification is governed by the **date-level
+  evidence policy PA-0001** (§6c) after CME GCC confirmed no historical
+  archive exists.
 - **Front-contract/roll rule (PROPOSED, pending review)** — `nqresearch/rolls.py`:
   **strictly causal** — the front effective for session S is decided from the
   PREVIOUS completed eligible session's outright volumes (matching Databento's
@@ -418,9 +419,12 @@ validation. Current storage status: §5.5.)*
   proviso applies to the partition proposal
   (`calendar_verification_state=PROVISIONAL_DOCUMENT_VERIFICATION_PENDING`,
   `activation_ready=false`). `activation_ready` may become true only when
-  official CME document verification is complete AND all structural partition
-  checks PASS AND explicit human partition approval is recorded; artifact
-  `status` expresses computational validity only, never activation readiness.
+  date-level calendar evidence is complete per PA-0001 (§6c: every
+  exceptional date DOCUMENT_VERIFIED or
+  TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, no conflicts) AND all structural
+  partition checks PASS AND explicit human partition approval binding the
+  exact evidence hashes is recorded; artifact `status` expresses
+  computational validity only, never activation readiness.
   Acquisition reasons: `UNKNOWN_NOT_RECORDED_PENDING_USER_INPUT`.
 - **Partition proposal** (`partition_proposal.json`, **PROPOSED_NOT_ACTIVE** —
   requires explicit human approval; revised per review so **no MBO block
@@ -498,15 +502,95 @@ out-of-range sessions (2026-08-17 edge) are excluded from the series.
   **8 switches** — the 8 quarterly rolls (Sep/Dec/Mar/Jun ×2 years) — under
   the proposed rule in §6a; per-session front + roll-week flags emitted.
 
+## 6c. CME calendar evidence remediation (2026-08-19; protocol amendment PA-0001)
+
+**Trigger.** CME GCC replied in writing (case 04700128, 2026-08-19, DKIM
+`d=cmegroup.com` verified, email SHA-256
+`67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0`, immutable
+copy in `<data_root>/reference/cme_calendar/`): **CME does not maintain an
+archive of previous years' holiday calendars** and refers only to the current
+2026 holiday page. The blanket "official CME document per holiday group"
+requirement is therefore impossible for 2024/2025 dates. This correspondence
+proves archive unavailability only — never historical session times.
+
+**Amended policy (PA-0001,
+`docs/protocol-amendments/PA-0001-cme-calendar-evidence-policy.md`).**
+Verification is now **per exceptional date** (never per recurring group
+alone), recorded in the committed machine-readable matrix
+`config/data/cme_calendar_evidence.yaml` and enforced by
+`nqresearch/calendar_evidence.py` + the activation verifier in
+`nqresearch/holdout.py`. States: `DOCUMENT_VERIFIED`,
+`TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE` (verified GCC archive-
+unavailability + observed canonical Databento behaviour + at least one
+qualifying independent secondary source, no material conflict),
+`PENDING_EVIDENCE`, `CONFLICT_REQUIRES_REVIEW`. Evidence hierarchy: official
+CME artifact > GCC correspondence (availability facts only) > observed
+canonical MBP-1 behaviour > strong/partial secondary (NinjaTrader 2026, AMP
+GCC-attributed tables, dated ForexLive/Insignia statements) > lower-tier
+(CrossTrade, corroboration only) > tertiary date-only (Kibot — never session
+times). Mechanical fail-closed rules: sources support only their declared
+dates (a 2026 document can never promote a 2024/2025 date); every evidence
+file hash is verified against the immutable copies under
+`<data_root>/reference/cme_calendar/`; observed blocks are cross-checked
+against the live coverage artifact; groups roll up to their **weakest**
+member date.
+
+**Current state (26 exceptional dates: 21 early closes + 4 full holidays +
+2025-01-09):**
+
+- `DOCUMENT_VERIFIED` (8): **2025-01-09** (official CME mourning-schedule
+  PDF, which explicitly displays 'JANUARY 9, 2025' and 'CME GROUP US
+  EQUITIES — CLOSE at 8:30 AM CT'; corroborated by AMP's dated table and
+  observed zero-RTH data; CME's URL-slug year token '2024' is a naming
+  artifact — the printed date governs) and
+  **all seven 2026 corpus dates** (2026-01-01, 01-19, 02-16, 04-03 Good
+  Friday 08:15 CT, 05-25, 06-19, 07-03) via the seven researcher-downloaded
+  CME trading-hours exports, each independently corroborated by
+  NinjaTrader's 2026 schedule and observed data.
+- `TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE` (8): 2024-11-28 (ForexLive
+  direct 12:00 halt), 2024-12-24 + 2024-12-25 (Insignia direct 12:15 halt /
+  full closure), 2025-09-01, 2025-11-27, 2025-11-28, 2025-12-24, 2025-12-25
+  (AMP dated CME-Globex state tables, direct).
+- `PENDING_EVIDENCE` (10): 2024-09-02, 2024-11-29 (the only secondary
+  statement about the Friday sequence is excluded as ambiguous), 2025-01-01,
+  2025-01-20, 2025-02-17, 2025-04-18 (also no usable vendor records),
+  2025-05-26 (AMP content drift destroyed the expected 2025 evidence),
+  2025-06-19 (no secondary at all), 2025-07-03, 2025-07-04 —
+  lower-tier/date-only corroboration exists for most but never suffices
+  under PA-0001.
+- `CONFLICT_REQUIRES_REVIEW`: none. CrossTrade's broad "Closed" labels for
+  pre-RTH/ETH sessions and ForexLive's Friday wording are recorded as source
+  imprecision limitations, not material conflicts.
+
+**Findings recorded.** (a) The 2025-07-03 12:15 CT vs 2026-07-03 12:00 CT
+baseline question is **resolved**: 2025-07-03 (Thu) was the 12:15
+pre-holiday close, 2025-07-04 (Fri) the 12:00 holiday session; 2026-07-03 IS
+the observed holiday (12:00, officially documented). (b) **AMP content
+drift confirmed**: the Memorial Day URL now serves 2026-only assets; claims
+are bound to exact downloaded HTML/PNG hashes. (c) 2025-04-18 Good Friday
+has no usable vendor records (expected-missing pre-RTH short session),
+unlike 2026-04-03 (881,799 records ending exactly 08:15 CT).
+
+**Activation consequences.** Partitions can become eligible only when every
+date is `DOCUMENT_VERIFIED` or `TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE`
+with no conflicts, all structural checks PASS, and the activation binds the
+exact evidence-matrix, GCC-correspondence, effective-calendar and proposal
+hashes, with an append-only audit-log entry recording explicit human
+approval of those exact hashes. With 10 dates pending, the effective
+calendar, MBO blocks and partitions remain
+PROVISIONAL_DOCUMENT_VERIFICATION_PENDING and `activation_ready=false`.
+
 ## 7. Unresolved assumptions and open items (current, post-closeout)
 
-Current state reference: §6a/§6b and audit-log AL-0028.
+Current state reference: §6a/§6b/§6c and audit-log AL-0028/AL-0039.
 
-1. **Official-CME document-level calendar verification** — all 9 recurring
-   holiday groups are OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING and the
-   Jan-9 PDF SHA-256 awaits interactive retrieval (CME returns 403 to
-   scripts). Until complete: effective calendar, MBO blocks, and partition
-   dates stay PROVISIONAL_DOCUMENT_VERIFICATION_PENDING.
+1. **Date-level calendar evidence completion (PA-0001, §6c)** — 10 of 26
+   exceptional dates remain PENDING_EVIDENCE (no qualifying independent
+   secondary evidence; CME archive officially unavailable). Resolution
+   requires either newly surfaced qualifying evidence per date or an
+   explicit reviewed decision on the pending dates. Until then: effective
+   calendar, MBO blocks, and partition dates stay
+   PROVISIONAL_DOCUMENT_VERIFICATION_PENDING.
 2. **Partition activation** — the proposal is structurally valid (all gates
    PASS) but PROPOSED_NOT_ACTIVE with activation_ready=false; requires
    document verification (item 1) plus explicit human approval. The holdout

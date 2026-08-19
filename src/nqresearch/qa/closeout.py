@@ -23,6 +23,18 @@ from nqresearch.qa import status as st
 RTH_FULL_SPAN_S = 6.5 * 3600
 SPAN_TOLERANCE = 0.05
 
+
+def _calendar_evidence_state() -> str:
+    """Artifact-level calendar verification state per PA-0001: complete only
+    when every exceptional date is resolved (validated live against the
+    evidence matrix, evidence files and coverage artifact); any failure
+    stamps the pending state — never a completeness claim."""
+    from nqresearch import paths
+    from nqresearch.calendar_evidence import current_calendar_verification_state
+    from nqresearch.config import _repo_root
+
+    return current_calendar_verification_state(_repo_root(), paths.data_root())
+
 # Tentative boundaries (canonical §5.3: ~4-5 month holdout, candidate
 # ~2026-04-01; based ONLY on coverage/calendar/MBO placement/period lengths).
 # Revised per independent review so no MBO block spans a partition boundary:
@@ -96,22 +108,25 @@ def freeze_mbo_blocks(mbo_deep_artifact: Path) -> dict:
             # identities so a change to either input invalidates this artifact.
             **cal_id,
         },
-        "state": "PROVISIONAL_DOCUMENT_VERIFICATION_PENDING",
+        "state": _calendar_evidence_state(),
         "activation_ready": False,
         "activation_ready_conditions": [
-            "official CME document verification of the baseline calendar is "
-            "complete (overrides meta.baseline_verification all "
-            "DOCUMENT_VERIFIED)",
+            "date-level calendar evidence is complete per PA-0001: every "
+            "exceptional date DOCUMENT_VERIFIED or "
+            "TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, no conflicts "
+            "(config/data/cme_calendar_evidence.yaml)",
             "all structural partition checks PASS",
-            "explicit human partition approval has been recorded",
+            "explicit human partition approval has been recorded, binding "
+            "the exact proposal, evidence-matrix and CME-correspondence "
+            "hashes in the append-only audit log",
         ],
         "provisional_note": (
-            "Block IDs are PROVISIONAL_DOCUMENT_VERIFICATION_PENDING: "
-            "document-level verification of the baseline calendar's "
-            "exceptional sessions against official CME schedules is pending "
-            "(see cme_calendar_overrides.yaml meta.baseline_verification); "
-            "until complete, blocks and partition dates must not be described "
-            "as fully authoritative. The status field expresses computational "
+            "Block IDs inherit the calendar evidence state: until every "
+            "exceptional session of the effective calendar is resolved at "
+            "date level per PA-0001 (see cme_calendar_evidence.yaml and "
+            "cme_calendar_overrides.yaml meta.baseline_verification), blocks "
+            "and partition dates must not be described as fully "
+            "authoritative. The status field expresses computational "
             "validity only, never activation readiness."
         ),
         "n_sessions_final": len(dates),
@@ -185,14 +200,17 @@ def propose_partitions(blocks_frozen: dict) -> dict:
     return {
         "artifact": "partition_proposal",
         "state": "PROPOSED_NOT_ACTIVE",
-        "calendar_verification_state": "PROVISIONAL_DOCUMENT_VERIFICATION_PENDING",
+        "calendar_verification_state": _calendar_evidence_state(),
         "activation_ready": False,
         "activation_ready_conditions": [
-            "official CME document verification of the baseline calendar is "
-            "complete (overrides meta.baseline_verification all "
-            "DOCUMENT_VERIFIED)",
+            "date-level calendar evidence is complete per PA-0001: every "
+            "exceptional date DOCUMENT_VERIFIED or "
+            "TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, no conflicts "
+            "(config/data/cme_calendar_evidence.yaml)",
             "all structural partition checks PASS",
-            "explicit human partition approval has been recorded",
+            "explicit human partition approval has been recorded, binding "
+            "the exact proposal, evidence-matrix and CME-correspondence "
+            "hashes in the append-only audit log",
         ],
         "note": (
             "Boundaries derived only from coverage, calendar validity, MBO "

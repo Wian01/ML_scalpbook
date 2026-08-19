@@ -1,0 +1,976 @@
+# CME calendar evidence matrix — date-level evidence states for every
+# exceptional session in the canonical corpus (2024-08-19 .. 2026-08-14).
+#
+# Governed by docs/protocol-amendments/PA-0001-cme-calendar-evidence-policy.md.
+# CME GCC officially confirmed (2026-08-19) that no archive of previous
+# years' holiday calendars exists; this matrix therefore records, per date,
+# either official CME document verification or explicit triangulation over
+# the recorded evidence hierarchy. Nothing here silently upgrades a date:
+# a date without sufficient independent evidence stays PENDING_EVIDENCE.
+#
+# Evidence states (see nqresearch.calendar_evidence):
+#   DOCUMENT_VERIFIED                        official CME artifact proves the
+#                                            applicable date and exact schedule
+#   TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE  official archive-unavailability
+#                                            + observed canonical data
+#                                            + independent secondary source,
+#                                            no material conflict
+#   PENDING_EVIDENCE                         insufficient evidence
+#   CONFLICT_REQUIRES_REVIEW                 sources materially disagree
+#
+# Machine-verified invariants (fail-closed in code): the date set below is
+# exactly the frozen exceptional-session set; every date-level evidence
+# reference binds to a STABLE claim id its source actually declares; every
+# cited source declares the cited date in applicable_dates (a 2026 document
+# can never support a 2024/2025 date); every evidence file hash matches the
+# immutable copy under <data_root>/reference/cme_calendar/; the GCC .eml is
+# parsed and its From/Subject/Date/Message-ID/DKIM/Authentication-Results/
+# body must match the identities declared below; the coverage artifact's
+# SHA-256 must match before observed fields are compared; triangulation
+# requires the verified GCC email, observed canonical data, and a
+# SECONDARY_STRONG/SECONDARY_PARTIAL source with a DIRECT or
+# DOCUMENTED_INFERENCE claim — lower-tier sources (CrossTrade) and date-only
+# sources (Kibot) never suffice.
+
+meta:
+  purpose: date-level CME calendar evidence matrix (evidence-policy amendment PA-0001)
+  policy_version: 2
+  corpus_sessions: {start: "2024-08-19", end: "2026-08-14"}
+  evidence_root: reference/cme_calendar  # relative to the configured data_root
+  timezone_note: >-
+    All schedule times are US Central Time (CT) as published by CME; observed
+    timestamps are UTC nanoseconds from the canonical Databento MBP-1 corpus
+    (ts_event), converted using America/Chicago DST rules.
+  observed_reference:
+    artifact: qa/m0_closeout/mbp1_full_history_coverage.json  # relative to data_root
+    artifact_sha256: "03545b61595bf3375ab6880d4b7ce3e5d88fa61522291911e43dc3f6b9ea6687"
+    generated_at_utc: "2026-08-18T15:31:30Z"
+    git_sha: 3c7aee5e0f240b69d136ff341b608644dafc7a52
+    note: >-
+      Observed per-date behaviour below is transcribed from this artifact.
+      The activation verifier first checks the live artifact's bytes against
+      artifact_sha256, then mechanically re-checks every per-date observed
+      block against it. Regenerating the artifact is a reviewed event; spans
+      are deterministic and must reproduce identically, and the regenerated
+      artifact identity must be re-bound here in a reviewed change.
+
+archive_unavailability:
+  statement: >-
+    CME Global Command Center (GCC) confirmed in writing that CME does not
+    maintain an archive of previous years' holiday calendars and referred the
+    researcher to the current 2026 holiday page only. This correspondence
+    proves ARCHIVE UNAVAILABILITY ONLY; it does not prove any historical
+    trading hours.
+  email_source: cme-gcc-archive-unavailable-email
+  sender: CME Global Command Center <gcc@cmegroup.com>
+  sender_mailbox: gcc@cmegroup.com
+  sender_domain: cmegroup.com
+  subject: "Request for archived CME Globex equity holiday trading schedules 04700128"
+  message_date_utc: "2026-08-19T03:02:46Z"
+  message_id: "<rsPa-000000000000000000000000000000000000000000000TJZXSL00QwccnMtPTyyw8kOL1dAB5Q@sfdc.net>"
+  authentication: >-
+    Recipient-recorded Authentication-Results (mx.google.com): DKIM pass
+    (header.i=@cmegroup.com, s=CMEGDKIM1), DMARC pass (header.from=
+    cmegroup.com, p=REJECT), SPF pass (Salesforce relay). Scope: this is the
+    receiving mail system's stored verdict on the immutable message plus the
+    presence of CME's DKIM-Signature (d=cmegroup.com) — not a fresh
+    cryptographic DKIM verification against live DNS keys.
+  body_statement: >-
+    Unfortunately we do not have an archive for previous years holidays
+    calendar. You may refer to 2026 trading holidays in our CME Holiday HERE.
+  referral_url: "https://www.cmegroup.com/trading-hours.html#tradeDate=2026-09-07"
+
+sources:
+  # ---- Tier 1: official CME artifacts -------------------------------------
+  - id: cme-2026-new-years-xlsx
+    tier: OFFICIAL_CME
+    title: CME trading-hours holiday export, New Year's 2026 window (2025-12-31 .. 2026-01-02)
+    url: "https://www.cmegroup.com/trading-hours.html (interactive per-holiday schedule export; the tool does not expose a stable per-file URL)"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:46:08Z"
+    files:
+      - {file: cme-holiday-2026-new-years.xlsx, sha256: "b2b720d27df0159b33a8290cebba1a5f9193a8b850c4365c67700bc179801fd2"}
+    applicable_dates: ["2026-01-01"]
+    claims:
+      - id: eq-2025-12-31
+        text: >-
+          Equities 2025-12-31: 16:00 CLOSED (trade date 2025-12-31; normal
+          close, no evening reopen for a 2026-01-01 trade date).
+      - id: eq-2026-01-01
+        text: >-
+          Equities 2026-01-01: 16:00 PREOPEN, 17:00 OPEN — both trade date
+          2026-01-02 (New Year's Day fully closed until the 17:00 CT evening
+          open of the next trade date).
+      - id: eq-2026-01-02
+        text: "Equities 2026-01-02: 16:00 CLOSED (normal trading day)."
+    limitations:
+      - &xlsx-provenance >-
+        Export generated by CME's trading-hours tool (sheet name 'Trading
+        Hours Aug 19 2026'); no CME branding embedded in the file itself.
+        Authenticity rests on the researcher's attested interactive download
+        from cmegroup.com (the GCC referral page) on 2026-08-19, the CME-tool
+        content format, and full agreement with observed canonical data.
+  - id: cme-2026-mlk-xlsx
+    tier: OFFICIAL_CME
+    title: CME trading-hours holiday export, MLK 2026 window (2026-01-18 .. 2026-01-20)
+    url: "https://www.cmegroup.com/trading-hours.html (interactive per-holiday schedule export)"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:46:50Z"
+    files:
+      - {file: cme-holiday-2026-mlk.xlsx, sha256: "e08b69411b2cb19b2a9a415b54cc1d80fdf787b9ea6b874ed80b385cfd020d81"}
+    applicable_dates: ["2026-01-19"]
+    claims:
+      - id: eq-2026-01-19
+        text: >-
+          Equities 2026-01-19 (MLK Day): 12:00 PREOPEN (trading halt), 17:00
+          OPEN — trade date 2026-01-20; Sunday 2026-01-18 16:00 PREOPEN /
+          17:00 OPEN; 2026-01-20 16:00 CLOSED (normal).
+    limitations: [*xlsx-provenance]
+  - id: cme-2026-presidents-xlsx
+    tier: OFFICIAL_CME
+    title: CME trading-hours holiday export, Presidents' Day 2026 window (2026-02-15 .. 2026-02-17)
+    url: "https://www.cmegroup.com/trading-hours.html (interactive per-holiday schedule export)"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:47:13Z"
+    files:
+      - {file: cme-holiday-2026-presidents-day.xlsx, sha256: "bec62f281d8f069853f2258cc14dfa3ef6eb8874625102cb4eb34a23d3ab7cf4"}
+    applicable_dates: ["2026-02-16"]
+    claims:
+      - id: eq-2026-02-16
+        text: >-
+          Equities 2026-02-16 (Presidents' Day): 12:00 PREOPEN (trading
+          halt), 17:00 OPEN — trade date 2026-02-17.
+    limitations: [*xlsx-provenance]
+  - id: cme-2026-good-friday-xlsx
+    tier: OFFICIAL_CME
+    title: CME trading-hours holiday export, Good Friday 2026 window (2026-04-01 .. 2026-04-03)
+    url: "https://www.cmegroup.com/trading-hours.html (interactive per-holiday schedule export)"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:47:34Z"
+    files:
+      - {file: cme-holiday-2026-good-friday.xlsx, sha256: "58f747ae91efed56c4bad027d79dc7f05f30ef1506155f812bc0435e0cf60f77"}
+    applicable_dates: ["2026-04-03"]
+    claims:
+      - id: eq-2026-04-03
+        text: >-
+          Equities 2026-04-03 (Good Friday): 08:15 CLOSED, trade date
+          2026-04-03 — the session ends at 08:15 CT, before the 08:30 RTH
+          open (no RTH). 2026-04-01 and 2026-04-02 are normal days.
+    limitations: [*xlsx-provenance]
+  - id: cme-2026-memorial-xlsx
+    tier: OFFICIAL_CME
+    title: CME trading-hours holiday export, Memorial Day 2026 window (2026-05-24 .. 2026-05-26)
+    url: "https://www.cmegroup.com/trading-hours.html (interactive per-holiday schedule export)"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:48:06Z"
+    files:
+      - {file: cme-holiday-2026-memorial-day.xlsx, sha256: "3fe4f9b07afa71f1155859c48df2b63c9388b791b4e3608ddda4197a4ea4419c"}
+    applicable_dates: ["2026-05-25"]
+    claims:
+      - id: eq-2026-05-25
+        text: >-
+          Equities 2026-05-25 (Memorial Day): 12:00 PREOPEN (trading halt),
+          17:00 OPEN — trade date 2026-05-26.
+    limitations: [*xlsx-provenance]
+  - id: cme-2026-juneteenth-xlsx
+    tier: OFFICIAL_CME
+    title: CME trading-hours holiday export, Juneteenth 2026 window (2026-06-18 .. 2026-06-20)
+    url: "https://www.cmegroup.com/trading-hours.html (interactive per-holiday schedule export)"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:48:34Z"
+    files:
+      - {file: cme-holiday-2026-juneteenth.xlsx, sha256: "e21e8ed24e984f224d76ddf1be8102585a506849cfb7e1b6d3f18ddf71ff541f"}
+    applicable_dates: ["2026-06-19"]
+    claims:
+      - id: eq-2026-06-19
+        text: >-
+          Equities 2026-06-19 (Juneteenth, Friday): 12:00 CLOSED, trade date
+          2026-06-22 — Friday close at 12:00 CT with no same-day reopen;
+          next open belongs to trade date 2026-06-22 (Sunday 17:00 CT
+          evening open).
+    limitations: [*xlsx-provenance]
+  - id: cme-2026-independence-xlsx
+    tier: OFFICIAL_CME
+    title: CME trading-hours holiday export, Independence Day 2026 window (2026-07-03 .. 2026-07-05)
+    url: "https://www.cmegroup.com/trading-hours.html (interactive per-holiday schedule export)"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:48:53Z"
+    files:
+      - {file: cme-holiday-2026-independence-day.xlsx, sha256: "a5b90bde083ae9caaa42e2029b468230a176960e2ac3729abb05e64b95c60c2d"}
+    applicable_dates: ["2026-07-03"]
+    claims:
+      - id: eq-2026-07-03
+        text: >-
+          Equities 2026-07-03 (Independence Day observed, Friday): 12:00
+          CLOSED, trade date 2026-07-06; Sunday 2026-07-05 16:00 PREOPEN /
+          17:00 OPEN (trade date 2026-07-06).
+    limitations: [*xlsx-provenance]
+  - id: cme-mourning-2025-pdf
+    tier: OFFICIAL_CME
+    title: "U.S. National Day of Mourning Trading Schedule for Globex, BrokerTec, EBS and Trading Floor (CME Group PDF)"
+    url: "https://www.cmegroup.com/content/dam/cmegroup/trading-hours/files/day-of-mourning-january-9-2024.pdf"
+    retrieval_method: MANUAL_RESEARCHER_DOWNLOAD
+    retrieved_utc: "2026-08-19T02:16:30Z"
+    files:
+      - {file: day-of-mourning-january-9-2024.pdf, sha256: "f169d709420a24ebe7f0ab4466ecd8961ea677cb56e9a8fc60fc43dcc9a70ac2"}
+    applicable_dates: ["2025-01-09"]
+    claims:
+      - id: printed-date
+        text: >-
+          The document explicitly displays the date 'JANUARY 9, 2025'
+          (rendered header; established by independent visual inspection and
+          confirmed by decoding the PDF's CID-encoded text via its embedded
+          ToUnicode CMaps).
+      - id: eq-0830-close
+        text: >-
+          CME GROUP US EQUITIES: CLOSE at 8:30 AM CT (all times US Central
+          Time). U.S. Equity Index products close on Globex at 8:30am CT and
+          their settlements are copied from the prior business day.
+      - id: pdf-metadata
+        text: "Embedded metadata: Author 'CME Group'; ModDate 2024-12-30T13:28:07-06:00."
+    limitations:
+      - >-
+        CME's own URL slug year token ('january-9-2024') does not match the
+        printed date JANUARY 9, 2025 — a CME naming artifact, recorded for
+        completeness; the printed date governs.
+  # ---- Tier 2: official CME correspondence --------------------------------
+  - id: cme-gcc-archive-unavailable-email
+    tier: OFFICIAL_CME_CORRESPONDENCE
+    title: "CME GCC reply: no archive of previous years' holiday calendars (case 04700128)"
+    url: "email correspondence (original .eml with full headers preserved)"
+    retrieval_method: RESEARCHER_MAILBOX_EXPORT
+    retrieved_utc: "2026-08-19T03:18:03Z"
+    files:
+      - {file: 2026-08-19_cme-gcc_no-historical-holiday-archive.eml, sha256: "67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0"}
+    applicable_dates: ["2024-09-02", "2024-11-28", "2024-11-29", "2024-12-24",
+                       "2024-12-25", "2025-01-01", "2025-01-09", "2025-01-20",
+                       "2025-02-17", "2025-04-18", "2025-05-26", "2025-06-19",
+                       "2025-07-03", "2025-07-04", "2025-09-01", "2025-11-27",
+                       "2025-11-28", "2025-12-24", "2025-12-25", "2026-01-01",
+                       "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25",
+                       "2026-06-19", "2026-07-03"]
+    claims:
+      - id: archive-unavailable
+        text: >-
+          "Unfortunately we do not have an archive for previous years
+          holidays calendar. You may refer to 2026 trading holidays in our
+          CME Holiday HERE." (link target: cmegroup.com/trading-hours.html)
+    limitations:
+      - >-
+        Proves ARCHIVE UNAVAILABILITY ONLY. This email can never serve as
+        evidence of any historical session time (enforced mechanically by
+        tier gating in nqresearch.calendar_evidence).
+  # ---- Tier 4: strong secondary sources -----------------------------------
+  - id: ninjatrader-2026-holiday-hours
+    tier: SECONDARY_STRONG
+    title: "NinjaTrader support article: 2026 Holiday Trading Hours (CME Group equity index, US Central Time; created 2026-01-12, updated 2026-07-01)"
+    url: "https://support.ninjatrader.com/s/article/2026-Holiday-Trading-Hours?language=en_US"
+    retrieval_method: "SCRIPTED_SNAPSHOT (server-rendered variant; the default browser variant is a JavaScript shell without article text)"
+    retrieved_utc: "2026-08-19T04:05:08Z"
+    files:
+      - {file: secondary/ninjatrader-2026-holiday-trading-hours.html, sha256: "368d7b411551b5cf9ff17d88af5f37b1bb17668d166f7bd2ad38e19d572c1a27"}
+    applicable_dates: ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03",
+                       "2026-05-25", "2026-06-19", "2026-07-03"]
+    claims:
+      - id: ny-2026
+        text: "New Year 2026: Dec 31 regular close 16:00; Jan 1 trading resumes 17:00 CT."
+      - id: mlk-2026
+        text: "MLK 2026-01-19: trading halt 12:00, resumes 17:00 CT."
+      - id: presidents-2026
+        text: "Presidents' Day 2026-02-16: trading halt 12:00, resumes 17:00 CT."
+      - id: good-friday-2026
+        text: >-
+          Good Friday 2026-04-03: CME equity markets close at 08:15 CT;
+          Sunday 2026-04-05 regular open 17:00 CT.
+      - id: memorial-2026
+        text: "Memorial Day 2026-05-25: 12:00 halt, 17:00 re-open."
+      - id: juneteenth-2026
+        text: >-
+          Juneteenth 2026-06-19 (Friday): equities close 12:00 CT; next
+          session opens Sunday 17:00 CT.
+      - id: independence-2026
+        text: >-
+          Independence Day observed 2026-07-03 (Friday): equities close
+          12:00 CT; next session opens Sunday 17:00 CT.
+    limitations:
+      - "2026 only — never applicable to any 2024 or 2025 date."
+  - id: amp-mourning-2025
+    tier: SECONDARY_STRONG
+    title: "AMP Futures: US National Day of Mourning for Former President Jimmy Carter (dated schedule table attributed to CME Globex, January 9, 2025)"
+    url: "https://www.ampfutures.com/news/us-national-day-of-mourning-for-former-president-jimmy-carter"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:34Z"
+    files:
+      - {file: secondary/amp-mourning-2025-01-09.html, sha256: "b331463add3a8bc41d244ffbbf29ac78800e0638d4477670683ddcddec5be899"}
+      - {file: secondary/amp-mourning-2025-banner.png, sha256: "e631791376f869fd4b5882ead9bcad05c8719338a211880af08ce3e669071f44"}
+      - {file: secondary/amp-mourning-2025-schedule.png, sha256: "33ef1d96657d16c8de3077157cd4e5fbc68bcc24115633f835d0b1d42536b722"}
+    applicable_dates: ["2025-01-09"]
+    claims:
+      - id: table-0830
+        text: >-
+          Schedule table (PNG, header 'JANUARY 9, 2025'): CME GROUP US
+          EQUITIES — CLOSE at 8:30 AM CT; CME GROUP INTEREST RATE — EARLY
+          CLOSE 12:15 PM CT.
+      - id: margin-0815
+        text: >-
+          Page text: exchange maintenance margin required at 08:15 CT, 15
+          minutes before the equity close, with a normal evening reopening
+          (DOCUMENTED INFERENCE supporting the 08:30 close).
+    limitations:
+      - &amp-drift >-
+        AMP reuses article URLs and replaces content annually while retaining
+        older publication metadata; publication date and URL alone are
+        insufficient. Every claim is bound to the exact downloaded HTML/PNG
+        hashes above (CONTENT_DRIFT risk recorded).
+  - id: amp-labor-2025
+    tier: SECONDARY_STRONG
+    title: "AMP Futures: US Labor Day Holiday Trading Schedule 2025 (CME Globex state table, Aug 31 - Sep 2, 2025)"
+    url: "https://www.ampfutures.com/news/holiday-trading-schedule-labor-day"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:35Z"
+    files:
+      - {file: secondary/amp-labor-day-2025.html, sha256: "62a4a14a188ba24193b8253ef9c70e411b54cfb69023ecdf981687e8ab8e4804"}
+      - {file: secondary/amp-labor-2025-banner.png, sha256: "fd1ab4a036181763c15986ced89308a2ec4b253b8ae5dfced394062cddcf04c6"}
+      - {file: secondary/amp-labor-2025-schedule-a.png, sha256: "367a30eddd9bc115aeabc588d776e3e8666c29bbde37baf2ea536ec5dcb50e33"}
+      - {file: secondary/amp-labor-2025-schedule-b.png, sha256: "1d8dbc462398daad8f4281d05e64b27596f25929eba1dece0a4b9524a13152df"}
+      - {file: secondary/amp-labor-2025-notes.png, sha256: "3744b9c668186189ca639896050710992c04c79a563343738b32239d279a8113"}
+    applicable_dates: ["2025-09-01"]
+    claims:
+      - id: table-2025-09-01
+        text: >-
+          Schedule table (PNG, header 'SUNDAY 31 AUG 2025 / MONDAY 1 SEP
+          2025 / TUESDAY 2 SEP 2025'), Equities row: Mon 2025-09-01 12:00
+          PREOPEN (trading halt) and 17:00 OPEN, both trade date 2025-09-02;
+          Sunday 16:00 PREOPEN / 17:00 OPEN; Tuesday 16:00 CLOSED (normal).
+    limitations: [*amp-drift]
+  - id: amp-thanksgiving-2025
+    tier: SECONDARY_STRONG
+    title: "AMP Futures: Thanksgiving Holiday Trading Schedule (CME Globex state table, November 26-28, 2025)"
+    url: "https://www.ampfutures.com/news/holiday-trading-schedule-thanksgiving"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:35Z"
+    files:
+      - {file: secondary/amp-thanksgiving-2025.html, sha256: "6f6cffb411ad5ed34a4ba7187282c57b33d64f42041b752de9be9ba782ec4e2f"}
+      - {file: secondary/amp-thanksgiving-2025-banner.png, sha256: "115b56d482a6673f378990d0c8b10e190026622d6e52b95ed04fbd01d5a58cda"}
+      - {file: secondary/amp-thanksgiving-2025-schedule-a.png, sha256: "e39d7221d4112bb8fcfc9531aca0c710cf731b9213ae22fe4e919068c4d10cea"}
+      - {file: secondary/amp-thanksgiving-2025-schedule-b.png, sha256: "576bb72d7e5e2dd9980a4e3df4b91dd6e5b0744e25c613e4de8adde443c8a46c"}
+      - {file: secondary/amp-thanksgiving-2025-notes.png, sha256: "33231d0f04c03cbd98c54baca6bf274f6db560f2f2e51ff47f643a2f3572be01"}
+    applicable_dates: ["2025-11-27", "2025-11-28"]
+    claims:
+      - id: table-2025-11-27
+        text: >-
+          Schedule table (PNG, header 'WEDNESDAY 26 NOV 2025 / THURSDAY 27
+          NOV 2025 / FRIDAY 28 NOV 2025'), Equities row: Thu 2025-11-27
+          12:00 PREOPEN (trading halt) and 17:00 OPEN, both trade date
+          2025-11-28.
+      - id: table-2025-11-28
+        text: >-
+          Same table, Equities row: Fri 2025-11-28 12:15 CLOSED (trade date
+          2025-11-28).
+      - id: margin-2025-11-27
+        text: >-
+          Page text: maintenance margin required 11:45 CT on Nov 27, 15
+          minutes before the 12:00 halt (DOCUMENTED INFERENCE consistent
+          with the table).
+      - id: margin-2025-11-28
+        text: >-
+          Page text: maintenance margin required 12:00 CT on Nov 28, 15
+          minutes before the 12:15 close (DOCUMENTED INFERENCE consistent
+          with the table).
+    limitations: [*amp-drift]
+  - id: amp-christmas-2025
+    tier: SECONDARY_STRONG
+    title: "AMP Futures: Christmas Holiday Trading Schedule (CME Globex state table, December 24-26, 2025)"
+    url: "https://www.ampfutures.com/news/christmas-holiday-trading-schedule"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:36Z"
+    files:
+      - {file: secondary/amp-christmas-2025.html, sha256: "346863a11b777df3680a73c0854d7350ba92f7cf1ac1667505cabb256823770c"}
+      - {file: secondary/amp-christmas-2025-schedule-a.png, sha256: "57fd78335006cf95a0c3552b63eb69925db7c91ac13f9b40bbe9f0ef75bef78d"}
+      - {file: secondary/amp-christmas-2025-schedule-b.png, sha256: "4fa91c18b5f38b56471962578b11682de9a3565f2acda3b0544963635a4259ff"}
+      - {file: secondary/amp-christmas-2025-notes.png, sha256: "c9c9b772f45690985f24416bd0805e33443c23a70ac41559c7f59a63249dcddd"}
+    applicable_dates: ["2025-12-24", "2025-12-25"]
+    claims:
+      - id: table-2025-12-24
+        text: >-
+          Schedule table (PNG, header 'WEDNESDAY 24 DEC 2025 / THURSDAY 25
+          DEC 2025 / FRIDAY 26 DEC 2025'), Equities row: Wed 2025-12-24
+          12:15 CLOSED (trade date 2025-12-24).
+      - id: table-2025-12-25
+        text: >-
+          Same table, Equities row: Thu 2025-12-25 16:00 PREOPEN and 17:00
+          OPEN, both trade date 2025-12-26 (US day session closed, evening
+          reopen 17:00 CT); Fri 2025-12-26 16:00 CLOSED (normal).
+      - id: margin-2025-12-24
+        text: >-
+          Page text: maintenance margin required 12:00 CT on Dec 24, 15
+          minutes before the 12:15 close (DOCUMENTED INFERENCE consistent
+          with the table).
+    limitations: [*amp-drift]
+  - id: amp-new-year-2025-2026
+    tier: SECONDARY_STRONG
+    title: "AMP Futures: New Year Holiday Trading Schedule (CME Globex state table, Dec 31 2025 - Jan 2 2026)"
+    url: "https://www.ampfutures.com/news/new-year-holiday-trading-schedule"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:34Z"
+    files:
+      - {file: secondary/amp-new-year-2025-2026.html, sha256: "f0d103979a20cd80729d714513da0875765587e767eb980e9e1414fb4580d5f6"}
+      - {file: secondary/amp-newyear-2025-2026-schedule-a.png, sha256: "5659b630559e5d595bf2870053f8cc823a8f960618bc98ebc7670a2a74c018d3"}
+      - {file: secondary/amp-newyear-2025-2026-schedule-b.png, sha256: "582176b1b714e3f6ebcfaa41deb9393504d91d23e709ab3c72f082a179203a96"}
+      - {file: secondary/amp-newyear-2025-2026-notes.png, sha256: "974b46bd9049d65f69f80260d60c4c89eb45d5977473a680a0a68807ff0e2f55"}
+    applicable_dates: ["2026-01-01"]
+    claims:
+      - id: table-2026-01-01
+        text: >-
+          Schedule table (PNG, header 'WEDNESDAY 31 DEC 2025 / THURSDAY 1
+          JAN 2026 / FRIDAY 2 JAN 2026'), Equities row: Wed 2025-12-31 16:00
+          CLOSED (trade date 2025-12-31, normal close); Thu 2026-01-01 16:00
+          PREOPEN and 17:00 OPEN, both trade date 2026-01-02; Fri 2026-01-02
+          16:00 CLOSED (normal).
+    limitations:
+      - *amp-drift
+      - >-
+        Covers the 2025→2026 New Year window only; it is NOT evidence for
+        2025-01-01 (the 2024→2025 window content is no longer served).
+  - id: amp-memorial-2026-drifted
+    tier: SECONDARY_STRONG
+    title: "AMP Futures: Memorial Day Holiday Trading Schedule — live content now 2026 (CONTENT DRIFT: the 2025 content this URL previously served is no longer available)"
+    url: "https://www.ampfutures.com/news/holiday-trading-schedule-memorial-day"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:06:35Z"
+    files:
+      - {file: secondary/amp-memorial-day-2025.html, sha256: "82eb4a92db9577f750cffcd54b7621873eb8cbabe4129dd7ee96854bf5b930f3"}
+      - {file: secondary/amp-memorial-day-full.html, sha256: "5a33df33b41008b709778bc03face726ecf663502a5c60b2a89b5636a450cc73"}
+      - {file: secondary/amp-memorial-2026-banner.png, sha256: "b8a964266cafeaf9d7097a7c051de1dd59ed44dec7b7bf89e104b19733e9eb7e"}
+      - {file: secondary/amp-memorial-2026-schedule-a.png, sha256: "a3500f3266f10b961059f5e4848bc4cd56d061e74df24f0ca72c7c094a7c5ba5"}
+      - {file: secondary/amp-memorial-2026-schedule-b.png, sha256: "1498d3356d34fe94f09314429512bca792bbeb6c20759920171ade03fc40e027"}
+      - {file: secondary/amp-memorial-2026-notes.png, sha256: "b2f5ae6a1572671d9a5440def34b9468c0ad4a2acb82c03d89d323c2806e2eba"}
+    applicable_dates: ["2026-05-25"]
+    claims:
+      - id: table-2026-05-25
+        text: >-
+          Schedule table (PNG, header 'SUNDAY 24 MAY 2026 / MONDAY 25 MAY
+          2026 / TUESDAY 26 MAY 2026'), Equities row: Mon 2026-05-25 12:00
+          PREOPEN (trading halt) and 17:00 OPEN, both trade date 2026-05-26.
+    limitations:
+      - *amp-drift
+      - >-
+        CONTENT DRIFT DOCUMENTED: this URL was expected to carry the 2025
+        Memorial Day schedule (26 May 2025 12:00 CT halt); at retrieval time
+        (2026-08-19) every asset on the page is 2026-only ('Memorial Day
+        Holiday Trading Schedule - 2026' images; no 2025 asset remains).
+        It therefore provides NO evidence for 2025-05-26.
+  # ---- Tier 4: partial secondary sources ----------------------------------
+  - id: forexlive-thanksgiving-2024
+    tier: SECONDARY_PARTIAL
+    title: "TradingView news (ForexLive): CME adjusted trading hours during Thanksgiving holiday 2024"
+    url: "https://www.tradingview.com/news/forexlive:d70ee796b094b:0-cme-adjusted-trading-hours-for-various-products-during-thanksgiving-holiday-2024/"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:36Z"
+    files:
+      - {file: secondary/tradingview-forexlive-thanksgiving-2024.html, sha256: "59029768e4918b1c21b8340b2a2196fd19b2acb4ab8faac3ab1859de3334b2f9"}
+      - {file: secondary/forexlive-thanksgiving-2024-image.webp, sha256: "80ea2c5e5144a486629060c4c514ea2c2affd29279475c407c2e846c1387ccc1"}
+    applicable_dates: ["2024-11-28", "2024-11-29"]
+    claims:
+      - id: eq-2024-11-27-regular
+        text: "Equity Products, Wednesday 2024-11-27: regular trading hours."
+      - id: eq-2024-11-28-halt
+        text: "Equity Products, Thursday 2024-11-28 (Thanksgiving Day): trading halted at 12:00 PM CT."
+      - id: window-2024-11-27-29
+        text: >-
+          Embedded image: capture of CME's '2024 CME Globex Trading
+          Schedule' holiday index identifying the Thanksgiving window as
+          27-29 November 2024 (date-window information only, no times).
+    limitations:
+      - >-
+        Its statement 'Friday, November 29, 2024: Trading resumes at 5:00 PM
+        CT' is EXCLUDED from use: it omits the Friday 12:15 CT early close
+        and appears to confuse calendar-time with trade-date terminology.
+        The Friday sequence must not be derived from this source.
+  - id: insignia-christmas-2024
+    tier: SECONDARY_PARTIAL
+    title: "Insignia Futures & Options: 2024 U.S. Christmas Holiday CME & ICE Futures Trading Schedule"
+    url: "https://insigniafutures.com/christmas-futures-trading-schedule-2024/"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:38Z"
+    files:
+      - {file: secondary/insignia-christmas-2024.html, sha256: "4d6dc3343f93b48c42e575f0d07d812bbfe6c1fc1f48f516b8880aafeb1737ad"}
+      - {file: secondary/insignia-christmas-2024-card.jpg, sha256: "f83e6ac0e0bdf9055f67496e8f25a1d4e031e76bb5b8a9f8fc4e0bb1432f34f6"}
+      - {file: secondary/insignia-merry-christmas-2024.jpg, sha256: "660bc07e67f747b290083ec987b284ab404f273aed1f9e95096efa3f1514ce6a"}
+    applicable_dates: ["2024-12-24", "2024-12-25"]
+    claims:
+      - id: eq-2024-12-24-halt
+        text: "Tuesday, December 24, 2024 (Christmas Eve): Equity Futures trading halts at 12:15 PM CT."
+      - id: all-2024-12-25-closed
+        text: "Wednesday, December 25, 2024 (Christmas Day): all CME & ICE U.S. markets closed."
+    limitations:
+      - >-
+        Does not establish the precise evening PREOPEN/OPEN sequence; the
+        evening reopen is derived only from observed canonical data (and is
+        recorded as such).
+  # ---- Tier 5: lower-tier secondary ---------------------------------------
+  - id: crosstrade-2025
+    tier: SECONDARY_LOWER
+    title: "CrossTrade blog: CME Trading Hours for 2025 (holiday-date table)"
+    url: "https://crosstrade.io/blog/cme-trading-hours-for-2025"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:39Z"
+    files:
+      - {file: secondary/crosstrade-cme-trading-hours-2025.html, sha256: "da8aff288d8c3b52ec8241bfd6dad59d00f77f8de8591ba94f1226c43ff4c70d"}
+      - {file: secondary/crosstrade-2025-table.png, sha256: "69c0a89c298bbe7655d23cb5705cdf57430989cc38805c2a5d1fa05ef3246d77"}
+    applicable_dates: ["2025-01-01", "2025-01-20", "2025-02-17", "2025-04-18",
+                       "2025-05-26", "2025-07-04", "2025-09-01", "2025-11-27",
+                       "2025-12-25"]
+    claims:
+      - id: row-2025-01-01
+        text: "New Year's Day Jan 1, 2025 (Wed): Closed."
+      - id: row-2025-01-20
+        text: "Martin Luther King Jr. Day Jan 20, 2025 (Mon): early close at 12:00 PM (labelled CST)."
+      - id: row-2025-02-17
+        text: "Presidents' Day Feb 17, 2025 (Mon): early close at 12:00 PM."
+      - id: row-2025-04-18
+        text: "Good Friday Apr 18, 2025 (Fri): Closed (broad label; does not distinguish the pre-RTH ETH session)."
+      - id: row-2025-05-26
+        text: "Memorial Day May 26, 2025 (Mon): early close at 12:00 PM."
+      - id: row-2025-07-04
+        text: "Independence Day Jul 4, 2025 (Fri): early close at 12:00 PM."
+      - id: row-2025-09-01
+        text: "Labor Day Sep 1, 2025 (Mon): early close at 12:00 PM."
+      - id: row-2025-11-27
+        text: "Thanksgiving Nov 27, 2025 (Thu): early close at 12:00 PM."
+      - id: row-2025-12-25
+        text: "Christmas Day Dec 25, 2025 (Thu): Closed."
+    limitations:
+      - "Juneteenth is omitted entirely."
+      - "No evening-reopen or trade-date semantics; no product-state sequence."
+      - >-
+        Broad 'Closed' language must not override observed initialization/
+        pre-RTH records (e.g. Good Friday pre-RTH sessions, New Year ETH).
+      - >-
+        POLICY: lower-tier corroboration only — never sufficient on its own
+        to reach TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE (enforced by tier
+        gating); usable only where its specific statement agrees with
+        stronger evidence.
+  # ---- Tier 6: tertiary date-only cross-check -----------------------------
+  - id: kibot-market-holidays
+    tier: TERTIARY_DATE_ONLY
+    title: "Kibot: US market holidays reference (holiday dates 2024-2030 and special closures)"
+    url: "https://www.kibot.com/quality/market-holidays.html"
+    retrieval_method: SCRIPTED_SNAPSHOT
+    retrieved_utc: "2026-08-19T04:03:41Z"
+    files:
+      - {file: secondary/kibot-market-holidays.html, sha256: "a2c59495634c441492fbb120ff305a4f3b2ff0786e4229a0764d20e9cd41aa9a"}
+    applicable_dates: ["2024-09-02", "2024-11-28", "2024-12-25", "2025-01-01",
+                       "2025-01-09", "2025-01-20", "2025-02-17", "2025-04-18",
+                       "2025-05-26", "2025-06-19", "2025-07-04", "2025-09-01",
+                       "2025-11-27", "2025-12-25"]
+    claims:
+      - id: holiday-dates-2024-2025
+        text: >-
+          2024 holiday dates: Labor Day Sep 2, Thanksgiving Nov 28,
+          Christmas Dec 25. 2025 holiday dates: New Year's Jan 1, MLK Jan
+          20, Presidents' Feb 17, Good Friday Apr 18, Memorial May 26,
+          Juneteenth Jun 19, Independence Jul 4, Labor Sep 1, Thanksgiving
+          Nov 27, Christmas Dec 25.
+      - id: mourning-2025-01-09
+        text: >-
+          'January 9, 2025 — National day of mourning for President Jimmy
+          Carter' listed among special one-off closures (equities; CME
+          equity-index futures generally remained open during the 2004,
+          2007, 2018 and 2025 mourning days).
+    limitations:
+      - >-
+        POLICY: date-only cross-check. Never establishes exact NQ session
+        times or full/partial CME session classifications (enforced by tier
+        gating: DATE_ONLY claims never qualify for triangulation).
+
+# ---------------------------------------------------------------------------
+# Per-date evidence. 26 dates = every exceptional session of the effective
+# calendar inside the corpus (21 early closes + 4 full holidays + the
+# 2025-01-09 National Day of Mourning). Group names are byte-identical to the
+# frozen nine-group plan; 2025-07-03 (pre-holiday early close) belongs to the
+# Independence Day group; 2025-01-09 forms its own special group. Every
+# evidence reference binds source + claim_id (stable) + kind.
+# ---------------------------------------------------------------------------
+dates:
+  - date: "2024-09-02"
+    holiday_group: "Labor Day (2024-09-02, 2025-09-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "ETH open 17:00 Sep 1; RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date Sep 3)"
+    observed: {session_present: true, rth_span_seconds: 12599.9, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt; ETH records continue to the 17:00 CT boundary (post-halt PREOPEN-state updates)"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - >-
+        No qualifying independent secondary source: the ForexLive capture of
+        CME's 2024 index shows only the Labor Day date window (1-3 Sep 2024)
+        and is not cited; AMP's Labor Day URL now serves 2025 content.
+        Observed data + tertiary date agreement are insufficient under
+        PA-0001; remains PENDING_EVIDENCE.
+  - date: "2024-11-28"
+    holiday_group: "Thanksgiving + day after (2024-11-28/29, 2025-11-27/28)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "ETH open 17:00 Nov 27; RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date Nov 29)"
+    observed: {session_present: true, rth_span_seconds: 12598.8, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt (1.2 s quote-arrival shortfall at the open)"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: forexlive-thanksgiving-2024, claim_id: eq-2024-11-28-halt, kind: DIRECT}
+      - {source: forexlive-thanksgiving-2024, claim_id: window-2024-11-27-29, kind: DATE_ONLY}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations:
+      - "Evening-reopen sequence (17:00 CT) derived from observed data only."
+  - date: "2024-11-29"
+    holiday_group: "Thanksgiving + day after (2024-11-28/29, 2025-11-27/28)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:15; close 12:15 (trade date Nov 29); reopen Sunday 17:00"
+    observed: {session_present: true, rth_span_seconds: 13499.9, expected_rth_span_seconds: 13500, data_available: true,
+               note: "records end 12:15:00 CT exactly (last ts 18:15:00.068 UTC): direct observation of the 12:15 close"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: forexlive-thanksgiving-2024, claim_id: window-2024-11-27-29, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - >-
+        The only secondary statement about this specific day (ForexLive
+        'resumes at 5:00 PM CT') is excluded as ambiguous/incorrect — it
+        omits the 12:15 close. The 12:15 CT close is directly observed but
+        has no qualifying independent secondary corroboration; remains
+        PENDING_EVIDENCE.
+  - date: "2024-12-24"
+    holiday_group: "Christmas / New Year (2024-12-24/25, 2025-01-01, 2025-12-24/25, 2026-01-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:15; close 12:15 (trade date Dec 24); day session Dec 25 closed"
+    observed: {session_present: true, rth_span_seconds: 13499.7, expected_rth_span_seconds: 13500, data_available: true,
+               note: "records end 12:15:00 CT exactly (last ts 18:15:00.068 UTC)"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: insignia-christmas-2024, claim_id: eq-2024-12-24-halt, kind: DIRECT}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations: []
+  - date: "2024-12-25"
+    holiday_group: "Christmas / New Year (2024-12-24/25, 2025-01-01, 2025-12-24/25, 2026-01-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "full holiday: no trading day Dec 25; evening reopen 17:00 CT Dec 25 = start of trade date Dec 26"
+    observed: {session_present: false, rth_span_seconds: null, expected_rth_span_seconds: null, data_available: true,
+               note: "no Dec-25 session exists (verified absent); the 2024-12-26 session starts exactly 17:00 CT Dec 25 (23:00 UTC), confirming the evening reopen"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: insignia-christmas-2024, claim_id: all-2024-12-25-closed, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations:
+      - >-
+        Insignia does not establish the evening PREOPEN/OPEN sequence; the
+        17:00 CT reopen is derived from observed data only.
+  - date: "2025-01-01"
+    holiday_group: "Christmas / New Year (2024-12-24/25, 2025-01-01, 2025-12-24/25, 2026-01-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "full holiday: no trading day Jan 1; evening reopen 17:00 CT Jan 1 = start of trade date Jan 2"
+    observed: {session_present: false, rth_span_seconds: null, expected_rth_span_seconds: null, data_available: true,
+               note: "no Jan-1 session exists (verified absent); the 2025-01-02 session starts exactly 17:00 CT Jan 1 (23:00 UTC)"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-01-01, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - >-
+        Only lower-tier (CrossTrade) and date-only (Kibot) corroboration
+        exists; AMP's New Year URL now serves the 2025→2026 window only.
+        Under PA-0001 tier policy this cannot reach TRIANGULATED; remains
+        PENDING_EVIDENCE.
+  - date: "2025-01-09"
+    holiday_group: "National Day of Mourning (2025-01-09)"
+    instrument_scope: CME equity index futures (NQ within CME 'US Equities')
+    expected_ct: "ETH open 17:00 Jan 8; US equities CLOSE 08:30 (before RTH; no RTH); reopen 17:00 (trade date Jan 10)"
+    observed: {session_present: true, rth_span_seconds: 0.0, expected_rth_span_seconds: 0, data_available: true,
+               note: "1,300,929 ETH records, zero RTH records (OFFICIAL_SPECIAL_CLOSURE_NO_RTH WARN); matches an 08:30 CT close before the 08:30 RTH open"}
+    evidence:
+      - {source: cme-mourning-2025-pdf, claim_id: printed-date, kind: DIRECT}
+      - {source: cme-mourning-2025-pdf, claim_id: eq-0830-close, kind: DIRECT}
+      - {source: amp-mourning-2025, claim_id: table-0830, kind: DIRECT}
+      - {source: amp-mourning-2025, claim_id: margin-0815, kind: DOCUMENTED_INFERENCE}
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: mourning-2025-01-09, kind: DATE_ONLY}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []
+  - date: "2025-01-20"
+    holiday_group: "MLK Day (2025-01-20, 2026-01-19)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date Jan 21)"
+    observed: {session_present: true, rth_span_seconds: 12599.9, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-01-20, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - "Only lower-tier/date-only corroboration; remains PENDING_EVIDENCE under PA-0001 tier policy."
+  - date: "2025-02-17"
+    holiday_group: "Presidents Day (2025-02-17, 2026-02-16)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date Feb 18)"
+    observed: {session_present: true, rth_span_seconds: 12600.0, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-02-17, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - "Only lower-tier/date-only corroboration; remains PENDING_EVIDENCE under PA-0001 tier policy."
+  - date: "2025-04-18"
+    holiday_group: "Good Friday (2025-04-18, 2026-04-03)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "per baseline: ETH open 17:00 Apr 17; close 08:15 (before RTH; no RTH); reopen Sunday 17:00"
+    observed: {session_present: false, rth_span_seconds: null, expected_rth_span_seconds: null, data_available: false,
+               note: "NO usable vendor session records exist for 2025-04-18 (classified missing_pre_rth_short_session in the coverage audit); the expected pre-RTH short session cannot be confirmed from data — unlike 2026-04-03, which has 881,799 records ending exactly 08:15 CT"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-04-18, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - >-
+        Doubly insufficient: no observed canonical data for the date AND no
+        qualifying secondary source for the 08:15 CT pre-RTH schedule.
+        CrossTrade's broad 'Closed' is imprecise for a pre-RTH short session
+        (recorded as imprecision, not a material conflict, because the label
+        does not contradict a session with no RTH).
+  - date: "2025-05-26"
+    holiday_group: "Memorial Day (2025-05-26, 2026-05-25)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date May 27)"
+    observed: {session_present: true, rth_span_seconds: 12599.7, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-05-26, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - >-
+        AMP's Memorial Day URL was expected to provide strong secondary
+        evidence ('26 May 2025: equity-market halt at 12:00 CT') but its
+        live content has drifted to 2026-only (documented in the
+        amp-memorial-2026-drifted source); only lower-tier/date-only
+        corroboration remains, so the date stays PENDING_EVIDENCE.
+  - date: "2025-06-19"
+    holiday_group: "Juneteenth (2025-06-19, 2026-06-19)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00 (Thursday); reopen 17:00 (trade date Jun 20)"
+    observed: {session_present: true, rth_span_seconds: 12599.9, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - >-
+        No secondary source at all covers this date's schedule (CrossTrade
+        omits Juneteenth entirely); Kibot provides the date only. Remains
+        PENDING_EVIDENCE.
+  - date: "2025-07-03"
+    holiday_group: "Independence Day (2025-07-04, 2026-07-03)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "pre-holiday early close: RTH 08:30-12:15; close 12:15 (trade date Jul 3)"
+    observed: {session_present: true, rth_span_seconds: 13500.0, expected_rth_span_seconds: 13500, data_available: true,
+               note: "RTH span 08:30-12:15 observed exactly; resolves the previously flagged baseline question 2025-07-03 12:15 vs 2026-07-03 12:00 — in 2025 July 3 (Thursday) was the 12:15 pre-holiday close and July 4 (Friday) the 12:00 holiday session; in 2026 July 3 IS the observed holiday with a 12:00 close"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - >-
+        No secondary source covers the 2025-07-03 12:15 CT pre-holiday
+        close (CrossTrade lists only the Jul 4 holiday row). Group note: the
+        frozen group name lists the observed-holiday dates; this pre-holiday
+        early-close session belongs to the Independence Day group.
+  - date: "2025-07-04"
+    holiday_group: "Independence Day (2025-07-04, 2026-07-03)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "holiday session (Friday): RTH 08:30-12:00; close 12:00; reopen Sunday 17:00"
+    observed: {session_present: true, rth_span_seconds: 12599.9, expected_rth_span_seconds: 12600, data_available: true,
+               note: "records stop exactly 12:00:00 CT (last ts 17:00:00.068 UTC): direct observation of the 12:00 Friday close"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-07-04, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: PENDING_EVIDENCE
+    limitations:
+      - "Only lower-tier/date-only corroboration; remains PENDING_EVIDENCE under PA-0001 tier policy."
+  - date: "2025-09-01"
+    holiday_group: "Labor Day (2024-09-02, 2025-09-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date Sep 2)"
+    observed: {session_present: true, rth_span_seconds: 12600.0, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt; ETH records continue to the session boundary"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: amp-labor-2025, claim_id: table-2025-09-01, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-09-01, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations: []
+  - date: "2025-11-27"
+    holiday_group: "Thanksgiving + day after (2024-11-28/29, 2025-11-27/28)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00 (Thursday); reopen 17:00 (trade date Nov 28)"
+    observed: {session_present: true, rth_span_seconds: 12600.0, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: amp-thanksgiving-2025, claim_id: table-2025-11-27, kind: DIRECT}
+      - {source: amp-thanksgiving-2025, claim_id: margin-2025-11-27, kind: DOCUMENTED_INFERENCE}
+      - {source: crosstrade-2025, claim_id: row-2025-11-27, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations: []
+  - date: "2025-11-28"
+    holiday_group: "Thanksgiving + day after (2024-11-28/29, 2025-11-27/28)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "day after Thanksgiving: RTH 08:30-12:15; close 12:15 (trade date Nov 28)"
+    observed: {session_present: true, rth_span_seconds: 13500.0, expected_rth_span_seconds: 13500, data_available: true,
+               note: "records end 12:15:00 CT exactly; session carries VENDOR_CONDITION_DEGRADED WARN (one of the 11 vendor-degraded dates) — coverage is complete but vendor QoS was flagged"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: amp-thanksgiving-2025, claim_id: table-2025-11-28, kind: DIRECT}
+      - {source: amp-thanksgiving-2025, claim_id: margin-2025-11-28, kind: DOCUMENTED_INFERENCE}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations:
+      - "Observed session is vendor-QoS-degraded (WARN) though complete in span."
+  - date: "2025-12-24"
+    holiday_group: "Christmas / New Year (2024-12-24/25, 2025-01-01, 2025-12-24/25, 2026-01-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:15; close 12:15 (trade date Dec 24); day session Dec 25 closed"
+    observed: {session_present: true, rth_span_seconds: 13499.7, expected_rth_span_seconds: 13500, data_available: true,
+               note: "records end 12:15:00 CT exactly"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: amp-christmas-2025, claim_id: table-2025-12-24, kind: DIRECT}
+      - {source: amp-christmas-2025, claim_id: margin-2025-12-24, kind: DOCUMENTED_INFERENCE}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations: []
+  - date: "2025-12-25"
+    holiday_group: "Christmas / New Year (2024-12-24/25, 2025-01-01, 2025-12-24/25, 2026-01-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "full holiday: no trading day Dec 25; evening reopen 17:00 CT Dec 25 = start of trade date Dec 26"
+    observed: {session_present: false, rth_span_seconds: null, expected_rth_span_seconds: null, data_available: true,
+               note: "no Dec-25 session exists (verified absent); the 2025-12-26 session starts exactly 17:00 CT Dec 25 (23:00 UTC), confirming the 17:00 evening reopen"}
+    evidence:
+      - {source: cme-gcc-archive-unavailable-email, claim_id: archive-unavailable, kind: DIRECT}
+      - {source: amp-christmas-2025, claim_id: table-2025-12-25, kind: DIRECT}
+      - {source: crosstrade-2025, claim_id: row-2025-12-25, kind: DIRECT}
+      - {source: kibot-market-holidays, claim_id: holiday-dates-2024-2025, kind: DATE_ONLY}
+    agreement: AGREES
+    state: TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+    limitations: []
+  - date: "2026-01-01"
+    holiday_group: "Christmas / New Year (2024-12-24/25, 2025-01-01, 2025-12-24/25, 2026-01-01)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "full holiday: no trading day Jan 1; evening reopen 16:00 PREOPEN / 17:00 OPEN CT = start of trade date Jan 2"
+    observed: {session_present: false, rth_span_seconds: null, expected_rth_span_seconds: null, data_available: true,
+               note: "no Jan-1 session exists (verified absent); the 2026-01-02 session starts exactly 17:00 CT Jan 1 (23:00 UTC)"}
+    evidence:
+      - {source: cme-2026-new-years-xlsx, claim_id: eq-2026-01-01, kind: DIRECT}
+      - {source: ninjatrader-2026-holiday-hours, claim_id: ny-2026, kind: DIRECT}
+      - {source: amp-new-year-2025-2026, claim_id: table-2026-01-01, kind: DIRECT}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []
+  - date: "2026-01-19"
+    holiday_group: "MLK Day (2025-01-20, 2026-01-19)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date Jan 20)"
+    observed: {session_present: true, rth_span_seconds: 12600.0, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-2026-mlk-xlsx, claim_id: eq-2026-01-19, kind: DIRECT}
+      - {source: ninjatrader-2026-holiday-hours, claim_id: mlk-2026, kind: DIRECT}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []
+  - date: "2026-02-16"
+    holiday_group: "Presidents Day (2025-02-17, 2026-02-16)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date Feb 17)"
+    observed: {session_present: true, rth_span_seconds: 12599.9, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-2026-presidents-xlsx, claim_id: eq-2026-02-16, kind: DIRECT}
+      - {source: ninjatrader-2026-holiday-hours, claim_id: presidents-2026, kind: DIRECT}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []
+  - date: "2026-04-03"
+    holiday_group: "Good Friday (2025-04-18, 2026-04-03)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "ETH open 17:00 Apr 2; close 08:15 (before RTH; no RTH); reopen Sunday 17:00"
+    observed: {session_present: true, rth_span_seconds: 0.0, expected_rth_span_seconds: 0, data_available: true,
+               note: "881,799 records ending exactly 08:15 CT (13:15 UTC, CDT): direct observation of the pre-RTH close (SESSION_ENDS_BEFORE_RTH)"}
+    evidence:
+      - {source: cme-2026-good-friday-xlsx, claim_id: eq-2026-04-03, kind: DIRECT}
+      - {source: ninjatrader-2026-holiday-hours, claim_id: good-friday-2026, kind: DIRECT}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []
+  - date: "2026-05-25"
+    holiday_group: "Memorial Day (2025-05-26, 2026-05-25)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "RTH 08:30-12:00; halt 12:00; reopen 17:00 (trade date May 26)"
+    observed: {session_present: true, rth_span_seconds: 12599.9, expected_rth_span_seconds: 12600, data_available: true,
+               note: "RTH span matches 08:30-12:00 halt"}
+    evidence:
+      - {source: cme-2026-memorial-xlsx, claim_id: eq-2026-05-25, kind: DIRECT}
+      - {source: ninjatrader-2026-holiday-hours, claim_id: memorial-2026, kind: DIRECT}
+      - {source: amp-memorial-2026-drifted, claim_id: table-2026-05-25, kind: DIRECT}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []
+  - date: "2026-06-19"
+    holiday_group: "Juneteenth (2025-06-19, 2026-06-19)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "Friday: RTH 08:30-12:00; close 12:00 (trade date Jun 22); reopen Sunday 17:00"
+    observed: {session_present: true, rth_span_seconds: 12599.9, expected_rth_span_seconds: 12600, data_available: true,
+               note: "records stop exactly 12:00:00 CT (last ts 17:00:00.068 UTC): direct observation of the Friday close"}
+    evidence:
+      - {source: cme-2026-juneteenth-xlsx, claim_id: eq-2026-06-19, kind: DIRECT}
+      - {source: ninjatrader-2026-holiday-hours, claim_id: juneteenth-2026, kind: DIRECT}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []
+  - date: "2026-07-03"
+    holiday_group: "Independence Day (2025-07-04, 2026-07-03)"
+    instrument_scope: CME equity index futures (NQ within CME 'Equities')
+    expected_ct: "Friday (observed holiday): RTH 08:30-12:00; close 12:00 (trade date Jul 6); reopen Sunday 17:00"
+    observed: {session_present: true, rth_span_seconds: 12599.7, expected_rth_span_seconds: 12600, data_available: true,
+               note: "records stop exactly 12:00:00 CT (last ts 17:00:00.068 UTC)"}
+    evidence:
+      - {source: cme-2026-independence-xlsx, claim_id: eq-2026-07-03, kind: DIRECT}
+      - {source: ninjatrader-2026-holiday-hours, claim_id: independence-2026, kind: DIRECT}
+    agreement: AGREES
+    state: DOCUMENT_VERIFIED
+    limitations: []

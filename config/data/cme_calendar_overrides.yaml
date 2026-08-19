@@ -9,7 +9,13 @@ meta:
   references:
     - id: cme-trading-hours
       url: https://www.cmegroup.com/trading-hours.html
-      note: CME Group current trading-hours page (per-holiday schedule PDFs)
+      note: >-
+        CME Group current trading-hours page (per-holiday schedule exports).
+        CME GCC (case 04700128, 2026-08-19) referred all holiday-schedule
+        requests to this page and confirmed no archive of previous years'
+        calendars exists; the seven 2026 per-holiday xlsx exports under
+        <data_root>/reference/cme_calendar/ were downloaded interactively
+        from here (hashes in config/data/cme_calendar_evidence.yaml).
     - id: cme-roll-dates
       url: https://www.cmegroup.com/trading/equity-index/rolldates.html
       note: >-
@@ -22,46 +28,109 @@ meta:
         former President Jimmy Carter (observed January 9, 2025): US equity
         products halted 08:30 CT (no regular trading hours), reopening with
         the next session.
-      document_sha256: null
-      document_sha256_status: PENDING_MANUAL_RETRIEVAL
+      document_sha256: f169d709420a24ebe7f0ab4466ecd8961ea677cb56e9a8fc60fc43dcc9a70ac2
+      document_sha256_status: VERIFIED_MANUAL_RETRIEVAL
       document_sha256_note: >-
-        Automated download returned HTTP 403 on 2026-08-18; document identity
-        recorded by exact URL + title; hash to be added when the PDF is
-        retrieved interactively.
+        Retrieved interactively by the researcher on 2026-08-19 (automated
+        retrieval remains blocked by CME with HTTP 403); immutable copy at
+        <data_root>/reference/cme_calendar/day-of-mourning-january-9-2024.pdf.
+        The PDF explicitly displays 'JANUARY 9, 2025' and 'CME GROUP US
+        EQUITIES — CLOSE at 8:30 AM CT' (independent visual inspection,
+        confirmed by decoding the PDF's CID-encoded text via its embedded
+        ToUnicode CMaps); the URL slug's '2024' year token is a CME naming
+        artifact — the printed date governs (see cme_calendar_evidence.yaml,
+        source cme-mourning-2025-pdf).
       observed_confirmation: >-
         Vendor data for 2025-01-09 shows 1.3M ETH records and zero RTH
         records, matching the official schedule.
-  # Document-level verification status of the BASELINE's exceptional/
-  # shortened sessions within the corpus range 2024-08-19..2026-08-14,
-  # grouped by recurring official CME schedule. Observational agreement with
-  # decoded coverage is SUPPORTING evidence only; until every group is
-  # DOCUMENT_VERIFIED, the effective calendar (and everything derived from
-  # it: MBO blocks, partition dates) remains PROVISIONAL, not authoritative.
+  # Evidence policy: amended 2026-08-19 by PA-0001 after CME GCC officially
+  # confirmed that no archive of previous years' holiday calendars exists.
+  # Verification is DATE-LEVEL, recorded in the committed evidence matrix;
+  # the group entries below are conservative summaries (each group rolls up
+  # to its WEAKEST member date) and are mechanically cross-checked against
+  # the matrix by the activation verifier.
+  evidence_policy:
+    amendment: docs/protocol-amendments/PA-0001-cme-calendar-evidence-policy.md
+    matrix: config/data/cme_calendar_evidence.yaml
+    archive_unavailability_email_sha256: 67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0
+  # Date-level verification status of the BASELINE's exceptional/shortened
+  # sessions within the corpus range 2024-08-19..2026-08-14. States per
+  # nqresearch.calendar_evidence: DOCUMENT_VERIFIED /
+  # TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE / PENDING_EVIDENCE /
+  # CONFLICT_REQUIRES_REVIEW. Observational agreement with decoded coverage
+  # is SUPPORTING evidence only. Until every date is DOCUMENT_VERIFIED or
+  # TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, the effective calendar (and
+  # everything derived from it: MBO blocks, partition dates) remains
+  # PROVISIONAL, not authoritative.
   baseline_verification:
     status: PROVISIONAL_DOCUMENT_VERIFICATION_PENDING
+    unresolved_dates: 10
     groups:
       - holiday_group: Labor Day (2024-09-02, 2025-09-01)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2024-09-02": PENDING_EVIDENCE
+          "2025-09-01": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
       - holiday_group: Thanksgiving + day after (2024-11-28/29, 2025-11-27/28)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2024-11-28": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+          "2024-11-29": PENDING_EVIDENCE
+          "2025-11-27": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+          "2025-11-28": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
       - holiday_group: Christmas / New Year (2024-12-24/25, 2025-01-01,
           2025-12-24/25, 2026-01-01)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2024-12-24": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+          "2024-12-25": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+          "2025-01-01": PENDING_EVIDENCE
+          "2025-12-24": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+          "2025-12-25": TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+          "2026-01-01": DOCUMENT_VERIFIED
       - holiday_group: MLK Day (2025-01-20, 2026-01-19)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2025-01-20": PENDING_EVIDENCE
+          "2026-01-19": DOCUMENT_VERIFIED
       - holiday_group: Presidents Day (2025-02-17, 2026-02-16)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2025-02-17": PENDING_EVIDENCE
+          "2026-02-16": DOCUMENT_VERIFIED
       - holiday_group: Good Friday (2025-04-18, 2026-04-03)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2025-04-18": PENDING_EVIDENCE
+          "2026-04-03": DOCUMENT_VERIFIED
       - holiday_group: Memorial Day (2025-05-26, 2026-05-25)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2025-05-26": PENDING_EVIDENCE
+          "2026-05-25": DOCUMENT_VERIFIED
       - holiday_group: Juneteenth (2025-06-19, 2026-06-19)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2025-06-19": PENDING_EVIDENCE
+          "2026-06-19": DOCUMENT_VERIFIED
       - holiday_group: Independence Day (2025-07-04, 2026-07-03)
-        status: OBSERVATIONALLY_CONSISTENT_DOCUMENT_PENDING
+        status: PENDING_EVIDENCE
+        dates:
+          "2025-07-03": PENDING_EVIDENCE
+          "2025-07-04": PENDING_EVIDENCE
+          "2026-07-03": DOCUMENT_VERIFIED
+    special_closures:
+      - holiday_group: National Day of Mourning (2025-01-09)
+        status: DOCUMENT_VERIFIED
+        dates:
+          "2025-01-09": DOCUMENT_VERIFIED
     observational_note: >-
       All 25 baseline early closes match decoded coverage spans (25/25) and
-      the two full-holiday groups match zero-session observations.
+      the two full-holiday groups match zero-session observations. The
+      2025-07-03 12:15 CT vs 2026-07-03 12:00 CT baseline question is
+      resolved: in 2025, July 3 (Thursday) carried the 12:15 pre-holiday
+      close and July 4 (Friday) the 12:00 holiday session; in 2026, July 3
+      IS the observed holiday with a 12:00 close (officially documented).
 
 # date -> "HH:MM" America/Chicago close, overriding the baseline schedule.
 early_close_overrides:

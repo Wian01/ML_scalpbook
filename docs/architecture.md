@@ -34,6 +34,10 @@ src/nqresearch/
                 # mbp1-overlap-records), `nqr data storage-gate`
   calendar.py   # CME trading calendar (versioned committed snapshot,
                 # config/data/cme_calendar.yaml; generator in scripts/)
+  calendar_evidence.py  # PA-0001 date-level calendar evidence model:
+                # committed matrix config/data/cme_calendar_evidence.yaml,
+                # tier gating, hash-verified immutable evidence files,
+                # observed cross-check vs coverage artifact (fail-closed)
   rolls.py      # front-contract/roll rule (volume-leading, monotone expiry)
   holdout.py    # fail-closed mechanical holdout fence (PENDING_INDEPENDENT_AUDIT)
   research.py   # THE research-loading API: mandatory date range + fence first
@@ -84,6 +88,10 @@ The storage gate (`nqr data storage-gate`) measures free space on that volume.
 ```text
 <data_root>/raw/{trades,mbp1,mbo}   # immutable vendor data, read-only, never in Git
 <data_root>/normalized/  qa/  samples/  features/  labels/  datasets/  holdout/
+<data_root>/reference/cme_calendar/ # immutable calendar evidence files (GCC
+                                    # email, official CME exports/PDF, secondary
+                                    # snapshots) — hash-bound by the committed
+                                    # evidence matrix (PA-0001); never edited
 ```
 
 ### 3a. Physical storage policy (C: repo vs D: data volume)

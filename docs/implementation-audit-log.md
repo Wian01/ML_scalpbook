@@ -1414,3 +1414,305 @@ in by the entry that creates the initial commit.
   **Partitions remain unactivated.** No raw vendor data was modified.
 - **Commit:** this entry is the audit-log-only second commit (two-commit
   stamping pattern; the Milestone 1 commit is never amended).
+
+## AL-0038 — CME calendar-document verification attempt: retrieval blocked; ALL items remain PENDING
+
+- **Category:** data-quality/process finding (no configuration or evidence
+  changes were justified; none were made)
+- **Objective attempted:** retrieve official CME schedule documents for the
+  nine declared holiday groups (corpus 2024-08-19 → 2026-08-14) and the
+  2025-01-09 National Day of Mourning schedule, to upgrade
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING → DOCUMENT_VERIFIED with
+  hash-recorded evidence under `<data_root>/reference/cme_calendar/`.
+- **Result: BLOCKED.** cmegroup.com returns HTTP 403 for both the
+  trading-hours page and the known Jan-9 PDF URL, with an explicit body:
+  this IP is blocked for suspected scraping and CME's website Data Terms of
+  Use prohibit scripted/automated retrieval (contact gcc@cmegroup.com for
+  data delivery). Attempts made: Invoke-WebRequest and curl with
+  browser-class headers. Per instruction and in respect of CME's stated
+  terms, no further disguised automated attempts were made; no interactive
+  browser is available to this environment. **No hash was inferred, no
+  third-party copy substituted, and no status changed** — all nine groups
+  and the Jan-9 reference remain PENDING; `activation_ready` remains false;
+  the strengthened AL-0036 activation validation continues to fail closed.
+- **Evidence location prepared:** `<data_root>/reference/cme_calendar/`
+  created (empty; probe files containing 403 bodies were deleted — they are
+  not evidence). No raw data or QA artifacts touched; artifact-generation
+  code untouched (the stale restamp_note wording correction remains queued
+  for the next natural touch of that code, per the push-phase note).
+- **Manual action required from the researcher** (exact list in the phase
+  report): interactively download the 18 per-holiday CME trading-schedule
+  documents covering the nine groups (both years each, excluding post-corpus
+  holidays) plus the Jan-9 2025 mourning-day schedule PDF into the evidence
+  directory; verification, hashing, comparison, and status upgrades will
+  then proceed in a follow-up pass.
+- **Verification:** 342/342 tests (no code changes); working tree clean
+  apart from this entry; nothing committed/pushed; partitions unactivated.
+
+## AL-0039 — CME calendar evidence remediation: PA-0001 date-level policy, evidence intake, mechanical enforcement (UNCOMMITTED, PENDING_INDEPENDENT_REVIEW)
+
+- **Category:** protocol-relevant decision (evidence-policy amendment) +
+  implementation + data-quality findings + test additions/changes.
+- **Trigger (officially documented):** CME GCC reply, case 04700128,
+  2026-08-19 03:02:46 UTC, DKIM pass `d=cmegroup.com`, original `.eml`
+  preserved at `<data_root>/reference/cme_calendar/`
+  `2026-08-19_cme-gcc_no-historical-holiday-archive.eml`, SHA-256
+  `67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0`:
+  "Unfortunately we do not have an archive for previous years holidays
+  calendar" (referral to the current 2026 holiday page only). This proves
+  ARCHIVE UNAVAILABILITY ONLY — the blanket per-group official-document
+  requirement (AL-0026/27/36) is impossible for 2024/2025 dates. **This
+  amendment is a justified evidence-policy change caused by officially
+  confirmed archive unavailability — NOT a claim that the missing CME
+  documents were obtained.**
+- **Amendment:** `docs/protocol-amendments/PA-0001-cme-calendar-evidence-policy.md`
+  (first protocol amendment). Date-level states: DOCUMENT_VERIFIED /
+  TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE / PENDING_EVIDENCE /
+  CONFLICT_REQUIRES_REVIEW over the fixed evidence hierarchy (official CME >
+  GCC correspondence [availability facts only] > observed canonical MBP-1 >
+  strong/partial secondary > lower-tier corroboration > tertiary date-only).
+- **Evidence intake (immutable, hash-recorded in
+  `config/data/cme_calendar_evidence.yaml`):** researcher-dropped official
+  evidence (GCC `.eml`; seven CME trading-hours 2026 holiday xlsx exports —
+  content extracted and verified to prove the seven 2026 corpus dates'
+  Equities schedules; the official Jan-9 mourning PDF, embedded Title/Author
+  "CME Group", ModDate 2024-12-30, proving "US EQUITIES CLOSE at 8:30 AM
+  CT" — the body does NOT print the calendar date; the 2025-01-09 binding
+  is recorded as a documented inference). Scripted snapshots (36 files
+  total incl. exact PNG/webp assets) of: NinjaTrader 2026 holiday hours
+  (server-rendered variant; the default page is a JS shell), six AMP pages
+  + their CME-Globex-attributed schedule tables, TradingView/ForexLive
+  Thanksgiving-2024, Insignia Christmas-2024, CrossTrade 2025, Kibot.
+  Retrieval timestamps 2026-08-19 04:03–04:06 UTC.
+- **Data-quality findings:** (1) **AMP content drift CONFIRMED** — the
+  Memorial Day URL now serves 2026-only assets; the expected 2025 content
+  (26 May 2025 12:00 halt) is gone, so 2025-05-26 lost its strong secondary
+  source (drift risk recorded on every AMP source; claims bound to exact
+  downloaded hashes). (2) The 2025-07-03 12:15 vs 2026-07-03 12:00 baseline
+  question is RESOLVED (2025: Thu 7/3 12:15 pre-holiday close + Fri 7/4
+  12:00 holiday session, both observed exactly; 2026: Fri 7/3 IS the
+  holiday, 12:00, officially documented). (3) 2025-04-18 Good Friday has NO
+  usable vendor records (expected-missing pre-RTH short session) — observed
+  evidence unavailable for that date, unlike 2026-04-03 (881,799 records
+  ending exactly 08:15 CT). (4) ForexLive's Friday-Nov-29 wording and
+  CrossTrade's broad "Closed" labels recorded as source-imprecision
+  limitations (excluded/limited use), not material conflicts.
+- **Resulting states (26 exceptional dates):** 8 DOCUMENT_VERIFIED
+  (2025-01-09 + seven 2026 dates), 8 TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE
+  (2024-11-28, 2024-12-24, 2024-12-25, 2025-09-01, 2025-11-27, 2025-11-28,
+  2025-12-24, 2025-12-25), **10 PENDING_EVIDENCE** (2024-09-02, 2024-11-29,
+  2025-01-01, 2025-01-20, 2025-02-17, 2025-04-18, 2025-05-26, 2025-06-19,
+  2025-07-03, 2025-07-04), 0 conflicts. All nine group roll-ups
+  PENDING_EVIDENCE (weakest member). **Not forced to completion.**
+- **Mechanical enforcement (new/changed code):**
+  `src/nqresearch/calendar_evidence.py` (NEW: matrix schema, tier gating,
+  file-hash verification, observed-vs-coverage cross-check, conservative
+  roll-ups, completeness, fail-safe verification state);
+  `src/nqresearch/holdout.py` (activation now requires: matrix validates
+  incl. evidence-file hashes + coverage cross-check; every date resolved;
+  exact matrix + GCC-email hashes bound in `partitions_active.yaml` (two new
+  mandatory schema fields) AND cited verbatim in the approving append-only
+  audit-log entry; overrides group summaries must equal matrix roll-ups;
+  Jan-9 reference hash must match the verified PDF);
+  `src/nqresearch/qa/closeout.py` (activation_ready_conditions text per
+  PA-0001; calendar_verification_state stamped dynamically — completeness
+  never claimed on any validation failure). `config/data/`:
+  `cme_calendar_evidence.yaml` NEW (matrix file SHA-256
+  `b09ddae32cf46a6a6c03ba928d710237a300766959c7ff7881163a5573ebd095`);
+  `cme_calendar_overrides.yaml` restructured to date-level group summaries +
+  real Jan-9 PDF SHA-256
+  `f169d709420a24ebe7f0ab4466ecd8961ea677cb56e9a8fc60fc43dcc9a70ac2`
+  (calendar CONTENT unchanged: `effective_calendar_sha256` unchanged).
+- **Tests (rule 7 note — deliberate behavioural changes justified by
+  PA-0001):** NEW `tests/unit/test_calendar_evidence.py` + shared builders
+  in `tests/unit/conftest.py`; `tests/unit/test_holdout_fence.py` fixtures
+  rebuilt on the date-level model. Adversarial coverage: missing/changed
+  email fails; email can never prove times nor support DOCUMENT_VERIFIED;
+  Kibot-only and CrossTrade-only can never triangulate; missing observed
+  data fails; discrepancy forces CONFLICT and blocks completeness; a source
+  cited outside its declared dates fails (2026 can never verify 2024/25);
+  one verified year never promotes a group (roll-up + overrides-mismatch
+  tests); partial evidence stays pending and blocks activation; fabricated
+  hashes/states fail; activation requires the approval entry to cite the
+  exact proposal + matrix + email hashes (each omission fails); tampered
+  evidence bytes fail; missing coverage artifact fails; wrong Jan-9 hash
+  fails. Superseded old tests: group-level `source_reference`/
+  `document_sha256` requirement replaced by per-date matrix evidence
+  (test_verified_group_without_document_identity_fails →
+  matrix/roll-up variants); `baseline_status` fixtures → `overrides_status`.
+  The REAL committed matrix is itself under test: validates against the
+  real evidence directory + coverage artifact, is incomplete with exactly
+  the 10 pending dates, real overrides agree with roll-ups, real activation
+  remains impossible. **Suite: 382/382 pass** (was 342).
+- **Provenance consequence (reported, not repaired):** the overrides edit
+  changes the effective config hash `95a9dd78…6874163d` →
+  `552fbb49db2d4ae68d4246a3e41477b3deea89a9dba20e9fd0639e4e2f2a7a31`;
+  `require_provenance()` now refuses (acquisition gate stale BY DESIGN).
+  No QA artifact was regenerated or overwritten; the formal
+  commit-and-restamp sequence is reserved for after independent approval.
+  Decision recorded: the new evidence matrix is NOT added to the effective
+  config hash (it gates activation via its own bound file hash; adding it
+  would touch `config.py` inside the acquisition code hash) — flagged for
+  reviewer confirmation.
+- **Docs:** data-spec §6c NEW + §6a/§7 updates; holdout-policy activation
+  preconditions; architecture (module + `<data_root>/reference/` layout);
+  CLAUDE.md/AGENTS.md status. AL-0038 and all history preserved unchanged.
+- **Untouched:** raw vendor data; all QA artifacts on disk; partitions
+  (**no `partitions_active.yaml`**, activation_ready=false everywhere);
+  HOLDOUT/FORWARD; normalization/features/labels/models; `cli.py` (the
+  stale restamp_note wording fix remains queued — that code was not
+  naturally touched). Evidence files were only added, never deleted/moved.
+- **Unresolved risks:** 10 pending dates (listed above) have no qualifying
+  independent secondary evidence; the Jan-9 PDF date binding and the xlsx
+  exports' authenticity rest on documented inference/researcher attestation
+  (recorded per-source); AMP URLs may drift further (claims are hash-bound);
+  observed facts in the matrix are transcribed from the coverage artifact
+  (mechanically re-checked at activation, but a coverage regeneration must
+  reproduce identical spans).
+- **Commit:** none yet (phase rule: stop for independent review before any
+  commit). The commit SHA will be recorded by the entry that creates it.
+
+## AL-0040 — Independent-review corrections to the PA-0001 evidence remediation (supersedes parts of AL-0039; AL-0038/AL-0039 text unchanged)
+
+- **Category:** review finding + implementation fix + test additions.
+  Independent read-only review reproduced AL-0039's inventory, state counts
+  and tests, and required four corrections, all applied here. Append-only:
+  AL-0039's superseded statements are corrected by THIS entry, never edited.
+- **(1) Jan-9 PDF finding CORRECTED:** the official PDF **explicitly
+  displays 'JANUARY 9, 2025'** together with 'CME GROUP US EQUITIES — CLOSE
+  at 8:30 AM CT'. AL-0039's claim that the body does not print the date was
+  an extraction artifact: the original pass read only the PDF's Type1 text
+  operators and missed the CID-encoded header; independent visual
+  inspection established the printed date, and it was then confirmed here
+  byte-level by decoding the CID text through the PDF's embedded ToUnicode
+  CMaps. 2025-01-09 remains DOCUMENT_VERIFIED — now on direct printed-date
+  evidence, with the URL slug's '2024' year token recorded as a CME naming
+  artifact. Inference wording removed from
+  `config/data/cme_calendar_evidence.yaml` (source `cme-mourning-2025-pdf`
+  claims `printed-date`/`eq-0830-close`), `cme_calendar_overrides.yaml`,
+  and data-spec §6c. AL-0039's text stands unedited as history.
+- **(2) Substantive fail-closed .eml verification:**
+  `_verify_archive_unavailability()` now PARSES the actual `.eml` bytes
+  (stdlib email parser) and requires: exactly one `.eml` evidence file;
+  parsed From mailbox `gcc@cmegroup.com` and domain `cmegroup.com`;
+  normalized Subject, UTC Date instant, and Message-ID each matching the
+  matrix; a DKIM-Signature with `d=cmegroup.com`; recipient-recorded
+  Authentication-Results showing DKIM pass for CME, DMARC pass for
+  cmegroup.com, and SPF pass; the exact archive-unavailability sentence
+  (new mandatory matrix field `body_statement`) in the normalized plain
+  body; and the declared trading-hours referral URL present in the message.
+  Scope stated honestly in code and matrix: this verifies the immutable
+  received message plus the receiving mail system's stored authentication
+  verdicts — NOT a fresh cryptographic DKIM verification. New adversarial
+  tests mutate From/Subject/Date/Message-ID/DKIM/Authentication-Results
+  (dkim/dmarc/spf individually)/body and **recompute the file hash**, so
+  each failure is proven to come from parsed-content inconsistency, plus
+  non-`.eml`-suffix and multiple-file rejections. All checks pass against
+  the real GCC message (dmarc=pass header.from=cmegroup.com confirmed
+  present in the real Authentication-Results).
+- **(3) Coverage-artifact identity enforced:**
+  `verify_observed_against_coverage()` now requires
+  `meta.observed_reference.artifact_sha256` to be a valid SHA-256 AND the
+  live artifact bytes to match it BEFORE any per-date observed comparison;
+  missing/invalid/mismatching identities fail closed. Regression test:
+  a structurally usable but byte-rewritten artifact fails on identity.
+  The real artifact continues to validate with SHA-256
+  `03545b61595bf3375ab6880d4b7ce3e5d88fa61522291911e43dc3f6b9ea6687`.
+- **(4) Stable claim-id binding:** every source claim now carries a unique
+  stable id (`SourceClaim{id,text}`); every date-level evidence reference
+  binds `source + claim_id + kind`; validation rejects unknown/renamed/
+  invented claim ids, duplicate ids within a source, and (as before)
+  citations outside a source's `applicable_dates`. The committed matrix was
+  restructured accordingly (all 20 sources, all 26 dates); adversarial
+  tests cover an invented claim id on a valid source, a renamed source
+  claim breaking references, and duplicate claim ids.
+- **(5) `effective_config_hash()` docstring corrected:** it now accurately
+  enumerates its inputs (paths + sessions + mbp1_sources parsed values,
+  resolved data root, and the two calendar file hashes) instead of claiming
+  "config/data/*.yaml", and documents that `cme_calendar_evidence.yaml` is
+  deliberately NOT included — it gates partition activation via its own
+  SHA-256 binding in `partitions_active.yaml` + the approving audit entry,
+  so acquisition provenance is not coupled to evidence bookkeeping. NOTE:
+  `config.py` is one of the seven acquisition-code-hash modules, so this
+  docstring change moves `acquisition_code_hash` (provenance was already
+  stale from the config change; re-binding remains reserved).
+- **Identities after correction:** matrix file SHA-256
+  `89cc29fda3bf079cfc4c853e5cacc6f10480665f6dbc247265f21ff9a8570aad`
+  (supersedes AL-0039's `b09ddae3…`); effective config hash
+  `2dccccbd76daeb90f021faf3ddcc65efddc1067788892ac661635b675ac0e347`
+  (supersedes `552fbb49…`; still ≠ the gate's `95a9dd78…` — provenance
+  stale by design); `effective_calendar_sha256` still unchanged
+  (`ca2edfe6…`); GCC email SHA-256 unchanged (`67adfa61…`).
+- **Verification:** full suite **401/401 pass** (was 382); all 45 evidence
+  files re-verified byte-identical; states unchanged — 8 DOCUMENT_VERIFIED
+  (incl. 2025-01-09), 8 TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, 10
+  PENDING_EVIDENCE, 0 conflicts; all nine recurring groups remain
+  conservatively PENDING_EVIDENCE;
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING remains in force; no
+  `partitions_active.yaml`; no raw data or existing QA artifact changed
+  (coverage artifact hash verified unchanged); `git diff --check` clean.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0041 — Second-round review corrections: strict path containment + exact authentication-domain tokens (AL-0038..AL-0040 unchanged)
+
+- **Category:** review finding + implementation fix + test additions.
+  Independent review confirmed the AL-0040 corrections and reproduced two
+  remaining defects, both fixed here.
+- **(1) Path-containment defect (reproduced by the reviewer):** an evidence
+  source declaring `../outside.bin` passed `validate_matrix()` when the
+  external file's hash matched — the previous guard was a string-based `..`
+  check applied only to two meta fields, not to per-file paths. Fix: shared
+  Windows-safe containment resolver in `nqresearch/rawguard.py`
+  (`resolve_strictly_contained` + public `is_contained`, reusing the
+  existing deepest-existing-ancestor resolution and casefolded segment-wise
+  comparison). It rejects `..` traversal, absolute paths, drive-qualified
+  and drive-relative forms (`C:\x`, `D:file`), root-relative (`\x`, `/x`)
+  and UNC paths, symlink/junction escapes, and prefix-collision directories;
+  the RESOLVED path is returned and used for the actual read, so validation
+  and reading can never diverge. Applied to: `meta.evidence_root` (must
+  resolve to an existing directory inside the data root), every
+  `EvidenceFile.file` (inside the resolved evidence root), the `.eml` path
+  in `_verify_archive_unavailability()`, and
+  `meta.observed_reference.artifact` (inside the data root AND specifically
+  under `<data_root>/qa/`). Regression tests: `../outside.bin` WITH a
+  matching SHA-256 (proving a correct hash can never legitimize an
+  out-of-root file), explicit absolute path (also hash-matching),
+  drive-relative, drive-qualified, root-relative (both separators), UNC,
+  alias escape via symlink with junction (`mklink /J`) fallback so the test
+  executes on unprivileged Windows, pure prefix-collision semantics
+  (`…/root2` never inside `…/root`), a legitimate nested
+  `secondary/file.html` (must keep working), an escaped `evidence_root`,
+  an escaped coverage-artifact path, and a coverage artifact inside the
+  data root but outside `qa/`.
+- **(2) Authentication-token weakness:** the Authentication-Results checks
+  used a general `cmegroup.com` substring inside the pass clauses, which a
+  crafted header like `header.i=@evilcmegroup.com` or
+  `header.from=cmegroup.com.evil.example` would satisfy. Fix: the DKIM pass
+  clause must carry the exact boundary-anchored token
+  `header.i=@cmegroup.com` and the DMARC pass clause the exact token
+  `header.from=cmegroup.com` (clause-scoped, `;`-delimited; suffix/prefix
+  look-alike domains can no longer match); SPF pass clause still required.
+  The exact real GCC header (`dkim=pass header.i=@cmegroup.com
+  header.s=CMEGDKIM1 …; dmarc=pass (p=REJECT sp=REJECT dis=NONE)
+  header.from=cmegroup.com`) verifies unchanged. Four new adversarial tests
+  substitute `@evilcmegroup.com` / `@cmegroup.com.evil.example` /
+  `header.from=evilcmegroup.com` / `header.from=cmegroup.com.evil.example`,
+  each RECOMPUTING the evidence-file hash so the failure is proven to be
+  parsed-authentication inconsistency, not a stale hash.
+- **Files changed:** `src/nqresearch/rawguard.py` (shared resolver +
+  `PathContainmentError`), `src/nqresearch/calendar_evidence.py`
+  (containment wiring + exact-token auth matching),
+  `tests/unit/test_calendar_evidence.py` (TestPathContainment, 4 auth
+  params). No config, matrix, overrides, or docs content changed —
+  matrix SHA-256 remains `89cc29fd…a8570aad`, effective config hash remains
+  `2dccccbd…5ac0e347`, GCC email `67adfa61…`, coverage `03545b61…`.
+- **Verification:** full suite **418/418 pass** (was 401; +13 containment
+  and +4 authentication-token tests); the real live
+  matrix validates through the new containment/auth paths; all 45 evidence
+  file hashes unchanged; states 8 DOCUMENT_VERIFIED / 8 TRIANGULATED / 10
+  PENDING_EVIDENCE / 0 conflicts; 2025-01-09 DOCUMENT_VERIFIED; all nine
+  recurring groups PENDING_EVIDENCE;
+  PROVISIONAL_DOCUMENT_VERIFICATION_PENDING in force; no
+  `partitions_active.yaml`; provenance stale by design; no raw data or QA
+  artifact changed; `git diff --check` clean.
+- **Commit:** none (stop-for-review rule); nothing pushed.

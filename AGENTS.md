@@ -160,9 +160,17 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   structurally valid
   (DEV 318/23/8, SELECTION 100/23/11, HOLDOUT 98/31/11, SPANNING 0) but
   **PROPOSED_NOT_ACTIVE, PROVISIONAL_DOCUMENT_VERIFICATION_PENDING,
-  activation_ready=false**. Current state: data-spec §6a/§6b + AL-0028.
-- Remaining open items: official-CME document-level calendar verification
-  (incl. the Jan-9 PDF SHA); explicit human partition activation approval;
+  activation_ready=false**. Current state: data-spec §6a/§6b/§6c + AL-0028.
+- Calendar evidence policy amended 2026-08-19 (**PA-0001**,
+  docs/protocol-amendments/): CME GCC confirmed no archive of previous
+  years' holiday calendars exists; verification is now DATE-LEVEL
+  (config/data/cme_calendar_evidence.yaml + nqresearch/calendar_evidence.py;
+  immutable evidence under `<data_root>/reference/cme_calendar/`). Current:
+  8 DOCUMENT_VERIFIED (2025-01-09 + all seven 2026 dates),
+  8 TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, 10 PENDING_EVIDENCE,
+  0 conflicts — activation still blocked.
+- Remaining open items: the 10 PENDING_EVIDENCE calendar dates (PA-0001,
+  data-spec §6c); explicit human partition activation approval;
   crossed-book burst 2026-08-10 11:31:58 CT pending session-phase/`status`
   classification (Milestone 2); remaining canonical §12 QA fields as a
   mandatory Milestone 2 gate; MBO acquisition reasons UNKNOWN_NOT_RECORDED.
