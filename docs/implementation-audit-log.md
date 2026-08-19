@@ -2750,3 +2750,102 @@ in by the entry that creates the initial commit.
 - **Commit:** this entry belongs to the remediation implementation commit;
   the subsequent artifact stamping is recorded separately in AL-0054.
   Nothing pushed.
+
+## AL-0054 — PA-0002 artifact stamping completed: all 12 artifacts regenerated from the remediation commit; cycle proven broken
+
+- **Category:** artifact regeneration + identity stamping (successful
+  completion of the sequence that AL-0052 recorded as blocked). AL-0047
+  through AL-0053 and all earlier entries are unchanged.
+- **Immutable implementation commits (neither amended):**
+  - PA-0002 implementation:
+    `f6b43537ebb7f301573fe4b8f95037a7fefa3e1c`
+  - Circularity remediation:
+    `37e38db2ba09fc6085f2f4651d757c6c88280657`
+- **The circularity and its resolution:** the coverage artifact's bytes
+  contain its provenance envelope, the envelope contains `config_hash`,
+  `config_hash` includes `research_eligibility.yaml`, the policy binds the
+  evidence-matrix SHA, and the matrix formerly bound the coverage artifact's
+  whole-file SHA — so re-binding never terminated (AL-0052). The matrix now
+  binds a versioned **coverage-substance digest** instead.
+  **Proven empirically by this regeneration:** the coverage artifact's
+  whole-file SHA changed `71db2f9e…` -> `2a215f30…` (new commit
+  `37e38db2…`, new config hash `48c2d27a…`, new code hash) while its
+  substance digest remained exactly
+  `2ebf83b6e44c42b24836453740702db2eb5012907bba701de46de4168cd88d39`, so the
+  committed matrix validated against the regenerated artifact with **no
+  re-binding**, and the closeout artifacts reached PASS.
+- **Digest algorithm:** `coverage-substance-v1`.
+  **Final substance digest:**
+  `2ebf83b6e44c42b24836453740702db2eb5012907bba701de46de4168cd88d39`.
+- **Revised identities:** evidence matrix
+  `f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250`;
+  research-eligibility policy
+  `4dbd9432c24f5f7d86baf63c955c35ad7ca8a02225623ce445be26b150ad4bdc`;
+  effective config hash
+  `48c2d27ad59d14ecfda4b35690ee1ca5e6c56fedd2e8aa04380309763aa10ce5`;
+  package/audit code hash
+  `b2283da193fce88fd510868be6c69112ed59ddda5548f476b7fe56bb53bab0b2`;
+  acquisition code hash
+  `2194635f5a3ca106a7f877b4e7c72b16035e085b652687a51a3d5551a4d7e211`.
+- **All 12 artifacts regenerated from the clean remediation commit**, sharing
+  `git_sha 37e38db2ba09fc6085f2f4651d757c6c88280657`,
+  `generation_git_clean` boolean true, the clean committed-tree note,
+  `config_hash 48c2d27a…`, `audit_code_hash b2283da1…`, `data_root
+  D:\nq-research\data`:
+  - `9d4233f49a20d03ed52c79e2714546532ee3aa43ae72be0cfd34713773d26b49` PASS mbp1_acquisition_gate.json
+  - `95177863ae3282d9e91d3c66d7510b1e0a7453ab7402887ed7ae4018c4213f12` PASS mbp1_manifest_validation.json
+  - `65e69f4745338d36c385f5b3b41c3deb28b950cd8f85a6aa87c59b560806b288` PASS mbp1_range_adjacency.json
+  - `3a88890c8d93e02e1a69af6c95c9e4a79b4dc5b79fd14db8d3bd8eaf03518202` WARN mbp1_sample_overlap.json
+  - `1b2a35119e7d29e763fdd39b458e43ffcab47f9ea4900af2e65d83e4f6783fc7` PASS mbp1_sample_overlap_record_level.json
+  - `55873038d7a94abcfbc0936ff247b732911bd1ae7de6b2233639b332699f7629` WARN mbp1_source_inventory.json
+  - `221cf498bcccddbb4f7f7cdf68877e61654f8bffea1a45ca01ae61846adcc068` PASS mbp1_source_selection.json
+  - `81da66dc79615a3789c97bca8f9d42b63f22a775f171e815739b55f68c5ca81d` WARN storage_gate.json
+  - `2a215f3048eb0dd5447db21ad9736db964822a961e54103fbd17410dacb349ad` WARN mbp1_full_history_coverage.json
+  - `dfb3640bf975f26e7688d02426adccbacd845160a1fda70a9e4ecfcf7f3e6075` PASS mbp1_front_contract_series.json
+  - `6dedf2c6aa7c1e77aa45d405bcba985470265b32327adc0a6cd12c1c6b0fa0fc` PASS mbo_blocks_frozen.json
+  - `a1b6d97b977cc1e80ed54b1bcba418a53091cff823f4c0551c33626cc8ff0e4b` PASS partition_proposal.json
+- **Acquisition reproduced exactly:** gate PASS with all 9 named checks PASS
+  and its `acquisition_code_hash` equal to the current one; manifests
+  **642/642** with zero failures; record-level overlap **11/11 pairs,
+  115,583,040 records identical**; range adjacency PASS; source selection
+  PASS with zero sample leakage; inventory WARN solely from the 11
+  understood vendor-degraded dates (zero metadata problems); storage WARN at
+  **1,720.7 GB**, above the 1 TB minimum. **Live `require_provenance()`
+  PASSES** (gate PASS, clean true, sha 37e38db2…).
+- **Closeout completed:** coverage WARN for exactly the understood condition
+  — 516 expected, `n_fail=0`, `missing_sessions=[]`,
+  `cross_file_order_violations=0`,
+  `missing_pre_rth_short_sessions=["2025-04-18"]`, single non-PASS check
+  `pre_rth_short_sessions_without_data`; front series PASS, strictly causal,
+  **8 switches**, 2026-08-17 partial edge excluded; MBO blocks **PASS with
+  77 sessions / 30 blocks**, zero quarantined dates in candidate sessions or
+  block spans, and the block-stage deferred structural WARN correctly
+  non-blocking; partition proposal **PASS** with exactly the three
+  structural checks all PASS, DEV/SELECTION/HOLDOUT **318/100/98**, MBO
+  **23/23/31** with blocks 8/11/11 and **SPANNING 0**, candidate binding
+  reporting **10 quarantined dates / 8 excluded observed DEV / 309 eligible
+  DEV**, zero structural input problems, all five binding checks PASS, and
+  its three bound structural identities equal to the freshly regenerated
+  coverage, MBO-block and front-series artifacts.
+- **Activation state UNCHANGED and explicitly not approved:** the partition
+  proposal remains `PROPOSED_NOT_ACTIVE` with `activation_ready=false`, the
+  calendar remains `PROVISIONAL_PENDING_DATES_QUARANTINED`, and the
+  research-eligibility policy remains
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` — it is **not**
+  activation-approved. No `config/data/partitions_active.yaml` exists and the
+  holdout fence still refuses. Partition activation did NOT occur.
+- **Verification:** full suite **985/985 pass**; `git diff --check` clean;
+  raw vendor data unchanged (1,453 files); all 45 calendar evidence files
+  unchanged (rollup `396bb01d…`); Git tracks no data artifacts; no
+  HOLDOUT/FORWARD access; no normalization, feature, label, sample, dataset,
+  model or experiment work occurred.
+- **One follow-up test-only commit:**
+  `c049cb327cb3f82259068788a593b44b045e7179` — the real-corpus proposal
+  regression called `propose_partitions()` without
+  `mbo_blocks_artifact_sha256`, so after regeneration its structural-identity
+  binding was legitimately incomplete; the test now binds the written
+  MBO-block artifact hash exactly as the CLI does. It touches no file under
+  `src/`, so the package/audit code hash is unchanged at `b2283da1…` and the
+  12 artifacts stamped at `37e38db2…` remain valid.
+- **Commit:** this entry is the audit-log-only commit; no implementation
+  commit was amended. Nothing pushed.
