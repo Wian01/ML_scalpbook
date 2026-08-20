@@ -1,0 +1,23 @@
+activated: true
+approval:
+  approved_by: Wian
+  approval_reference: AL-0064
+  approved_at_utc: '2026-08-20T05:12:27Z'
+activation_candidate_sha256: 5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32
+partition_proposal_sha256: 24a555d6c45e691fe1838b7d7691059dce7bd6c7d07a55d5623e891a35a906fb
+effective_calendar_sha256: ca2edfe6c2d05007c35837341ac73de955d8df6fd7821410307bf7fc18a3d010
+evidence_matrix_sha256: f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250
+cme_correspondence_sha256: 67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0
+research_eligibility_sha256: b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f
+coverage_artifact_sha256: 3230d9c28bb62d814fdf2d6c03054968b932d05f3de509a77dcbf4dc0432ba31
+mbo_blocks_sha256: 24862c197de32885f30ef976cbf258ab95b4aacaf31d8eb539e298d07d361da9
+front_contract_series_sha256: d3d618a63c9623696b0a0f9c97b8d077e27bbb4f3cf48b23603f0d53121e960b
+dev:
+  start: '2024-08-19'
+  end: '2025-11-07'
+selection:
+  start: '2025-11-10'
+  end: '2026-03-31'
+holdout:
+  start: '2026-04-01'
+  end: '2026-08-14'

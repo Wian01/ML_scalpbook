@@ -77,16 +77,34 @@ permission to open HOLDOUT** — the separate opening workflow of §4 below
 still governs, and partitions remain `PROPOSED_NOT_ACTIVE` with
 `activation_ready=false`.
 
-**Approving the POLICY is not approving an activation candidate.** As of
-2026-08-20 the eligibility policy is `APPROVED_FOR_ACTIVATION`, but **no
-`partition_activation_candidate.json` has been generated**, **no
-`config/data/partitions_active.yaml` exists**, the neutral
-`partition_proposal.json` is still `PROPOSED_NOT_ACTIVE` with
-`activation_ready=false`, and **HOLDOUT remains sealed**. Activation still
-requires, per PA-0003: a generated candidate whose exact SHA-256 is
-separately approved by a human in an append-only audit entry carrying
-`- decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE` alongside all nine
-identities, and only then the active configuration.
+**CURRENT STATE (2026-08-20, AL-0067): DEV and SELECTION are ACTIVE;
+HOLDOUT and FORWARD remain mechanically SEALED.** The full PA-0003 chain
+completed: the eligibility policy reached `APPROVED_FOR_ACTIVATION`
+(AL-0060), the candidate `5d9fc036…` was generated from a clean tree
+(AL-0062), a human approved that exact candidate and its eight dependencies
+in AL-0064, and `config/data/partitions_active.yaml` (SHA-256 `e3126133…`)
+was published create-once from it (AL-0067). Active ranges: DEV
+2024-08-19 → 2025-11-07 and SELECTION 2025-11-10 → 2026-03-31.
+
+**Activation did NOT open HOLDOUT.** The holdout range is bound in the
+active configuration solely so the fence knows which dates to REFUSE. Every
+request touching 2026-04-01 → 2026-08-14 is refused — boundary days,
+straddles and enveloping ranges included — as is every FORWARD or otherwise
+out-of-range request. `holdout_opening()` still refuses unconditionally, the
+§4 opening workflow below still governs, and no `docs/holdout_plan_01.md`
+exists. The neutral `partition_proposal.json` remains `PROPOSED_NOT_ACTIVE`
+with `activation_ready=false`, and the candidate still declares
+`activation_ready=false` — activation is conferred only by the active
+configuration. Publication is create-once: it cannot be overwritten or
+mutated, and re-publication is refused.
+
+**No research data flows yet.** The ten evidence-pending dates remain
+quarantined (DEV yields exactly 309 eligible sessions, never a quarantined
+one), and the session-filtered normalized loader is still unimplemented, so
+`research_session_records()` and the research input APIs refuse with
+`ResearchLoaderNotImplementedError` and no raw UTC-day path is ever returned
+as research data. No normalization, feature, label, sample, dataset, model
+or experiment work has begun.
 
 Historical note: freezing the dates was a
 Milestone 0 deliverable (canonical §60 items 11–12) and must precede feature

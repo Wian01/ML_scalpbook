@@ -206,6 +206,32 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   relabelled `Z`); and `config/data/partitions_active.yaml` is published
   create-once and can never overwrite an existing activation. **PA-0003 is
   not activation approval and approves no policy.**
-- No features, labels, sampling, models, experiments, activated holdout
-  partition, protected holdout dataset, or holdout opening exists yet; only
-  the unactivated tentative HOLDOUT proposal exists (data-spec §6a).
+- **PARTITIONS ACTIVE for DEV and SELECTION ONLY (2026-08-20, AL-0067;
+  `config/data/partitions_active.yaml`, SHA-256 `e3126133…`).** Published
+  create-once from approved candidate `5d9fc036…` under human approval
+  **AL-0064** (approved_by Wian, 2026-08-20T05:12:27Z), binding nine
+  identities. Active ranges: **DEV 2024-08-19 → 2025-11-07**,
+  **SELECTION 2025-11-10 → 2026-03-31**.
+  - **HOLDOUT (2026-04-01 → 2026-08-14) and FORWARD (from 2026-08-17) remain
+    MECHANICALLY SEALED.** The holdout range is bound only so the fence knows
+    what to REFUSE; every request touching it — boundary days, straddles and
+    enveloping ranges included — is refused, as is every out-of-range request.
+    `holdout_opening()` still refuses unconditionally: the §4 opening workflow
+    is unimplemented and no `docs/holdout_plan_01.md` exists.
+  - **The ten evidence-pending dates remain QUARANTINED** and research-
+    ineligible; the DEV range yields exactly **309 eligible sessions** and
+    never returns a quarantined one. Their evidence states are still
+    `PENDING_EVIDENCE` and the calendar is still
+    `PROVISIONAL_PENDING_DATES_QUARANTINED`.
+  - **No normalization, feature, label, sample, dataset, model or experiment
+    work has begun.** `research_session_records()` and the research input
+    APIs still refuse with `ResearchLoaderNotImplementedError` — the
+    session-filtered normalized loader is NOT implemented (a UTC-day file can
+    mix SELECTION and HOLDOUT sessions), so no raw path is ever returned as
+    research data.
+  - Activation is **create-once**: re-publication is refused and the file
+    cannot be overwritten or mutated. `partitions_active.yaml` is
+    deliberately NOT part of the effective config hash, so the 12 QA
+    artifacts and the candidate remain valid and byte-unchanged.
+- No features, labels, sampling, models, experiments, protected holdout
+  dataset, or holdout opening exists yet.

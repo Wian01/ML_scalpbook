@@ -827,16 +827,24 @@ class TestRealCommittedMatrix:
         assert ref["document_sha256"] == pdf_sha
         assert ref["document_sha256_status"] == "VERIFIED_MANUAL_RETRIEVAL"
 
-    def test_real_activation_still_impossible(self):
-        # End-to-end: with the real repo + real data volume the public loader
-        # still fails closed (partitions file absent; evidence incomplete).
-        from nqresearch.holdout import (
-            PartitionsNotActiveError,
-            load_active_partitions,
+    def test_real_activation_accepted_under_the_quarantine_disposition(self):
+        # CHANGED STATE (AL-0067): DEV/SELECTION are ACTIVE. The evidence is
+        # still INCOMPLETE — ten dates remain PENDING_EVIDENCE — so activation
+        # was only possible via the PA-0002 quarantine disposition, and the
+        # calendar must still report itself provisional.
+        from nqresearch import paths
+        from nqresearch.calendar_evidence import (
+            CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED,
+            current_calendar_verification_state,
         )
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import load_active_partitions
 
-        with pytest.raises(PartitionsNotActiveError):
-            load_active_partitions()
+        parts = load_active_partitions()
+        assert parts.activated is True
+        assert (current_calendar_verification_state(_repo_root(),
+                                                    paths.data_root())
+                == CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED)
 
     def test_group_name_consistency_with_holdout_frozen_plan(self):
         from nqresearch.holdout import EXPECTED_BASELINE_GROUPS

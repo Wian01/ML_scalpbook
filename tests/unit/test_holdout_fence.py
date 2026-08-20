@@ -64,17 +64,50 @@ class TestFailClosed:
         with pytest.raises(PartitionsNotActiveError, match="FAIL-CLOSED"):
             _load_active_partitions_from(_repo(tmp_path))
 
-    def test_live_repo_fails_closed_and_public_api_has_no_injection(self):
-        # The real repository has NO active partitions: the PUBLIC loader and
-        # fence must fail closed, and neither accepts a config-injection
-        # parameter that could bypass this.
-        with pytest.raises(PartitionsNotActiveError):
-            load_active_partitions()
-        with pytest.raises(PartitionsNotActiveError):
+    def test_live_repo_is_active_and_public_api_has_no_injection(self):
+        # CHANGED STATE (AL-0067): DEV/SELECTION are ACTIVE, so the public
+        # loader now succeeds. What must not change: an out-of-range request
+        # is still refused, and neither entry point accepts a config-injection
+        # parameter that could bypass the fence.
+        parts = load_active_partitions()
+        assert parts.activated is True
+        assert parts.approval.approval_reference == "AL-0064"
+        with pytest.raises(HoldoutFenceError):
             assert_research_range_allowed(date(2099, 1, 10), date(2099, 1, 20))
         for fn in (load_active_partitions, assert_research_range_allowed):
             params = set(inspect.signature(fn).parameters)
             assert not params & {"repo_root", "root", "config", "path"}, fn
+
+    def test_live_active_ranges_are_exactly_the_approved_ones(self):
+        parts = load_active_partitions()
+        assert (parts.dev.start, parts.dev.end) == (date(2024, 8, 19),
+                                                    date(2025, 11, 7))
+        assert (parts.selection.start, parts.selection.end) == (
+            date(2025, 11, 10), date(2026, 3, 31))
+        assert (parts.holdout.start, parts.holdout.end) == (
+            date(2026, 4, 1), date(2026, 8, 14))
+
+    def test_live_fence_permits_dev_selection_and_refuses_holdout(self):
+        # DEV-only, SELECTION-only and DEV->SELECTION are permitted; every
+        # HOLDOUT-touching range and every out-of-range request is refused.
+        for a, b in [(date(2024, 8, 19), date(2025, 11, 7)),
+                     (date(2024, 10, 1), date(2024, 10, 31)),
+                     (date(2025, 11, 10), date(2026, 3, 31)),
+                     (date(2024, 8, 19), date(2026, 3, 31))]:
+            assert_research_range_allowed(a, b)
+        for a, b in [(date(2026, 4, 1), date(2026, 4, 1)),
+                     (date(2026, 8, 14), date(2026, 8, 14)),
+                     (date(2026, 4, 1), date(2026, 8, 14)),
+                     (date(2026, 3, 31), date(2026, 4, 1)),
+                     (date(2024, 8, 19), date(2026, 12, 31))]:
+            with pytest.raises(HoldoutAccessError):
+                assert_research_range_allowed(a, b)
+        for a, b in [(date(2026, 8, 17), date(2026, 8, 31)),
+                     (date(2026, 9, 1), date(2026, 9, 30)),
+                     (date(2024, 1, 1), date(2024, 6, 1)),
+                     (date(2024, 8, 1), date(2024, 9, 1))]:
+            with pytest.raises(HoldoutFenceError):
+                assert_research_range_allowed(a, b)
 
     def test_malformed_yaml_fails_closed(self, tmp_path):
         root = _repo(tmp_path)
@@ -216,14 +249,21 @@ class TestHoldoutRefusal:
 class TestResearchLayerEnforcement:
     """The independent audit's live bypass proof, as regression tests."""
 
-    def test_research_api_fails_closed_live_and_returns_nothing(self):
-        # With partitions inactive, the DEFAULT research API must fail closed
-        # — it can never return the 625 canonical files.
-        from nqresearch.research import research_input_entries, research_input_files
+    def test_research_api_returns_nothing_live_even_when_active(self):
+        # CHANGED STATE (AL-0067): partitions are active, so the fence no
+        # longer blocks DEV. The API must STILL return nothing — it can never
+        # hand back the 625 canonical files — because the session-filtered
+        # reader is unimplemented. HOLDOUT-spanning requests are refused by
+        # the fence before the loader is even reached.
+        from nqresearch.research import (
+            ResearchLoaderNotImplementedError,
+            research_input_entries,
+            research_input_files,
+        )
 
-        with pytest.raises(PartitionsNotActiveError):
+        with pytest.raises(ResearchLoaderNotImplementedError):
             research_input_entries(date(2025, 1, 10), date(2025, 1, 20))
-        with pytest.raises(PartitionsNotActiveError):
+        with pytest.raises(HoldoutAccessError):
             research_input_files(date(2024, 8, 19), date(2026, 8, 14))
 
     def test_research_api_requires_explicit_range(self):

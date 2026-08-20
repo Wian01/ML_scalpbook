@@ -170,14 +170,19 @@ Planned per canonical §58: `nqr data normalize`, `nqr samples build`, `nqr labe
 
 0. **Data audit — COMPLETE** (closeout commit `3c7aee5e`, audit-log
    AL-0028): full-history coverage, provisional effective calendar, MBO
-   blocks, causal roll rule, partition proposal (PROPOSED_NOT_ACTIVE;
-   activation gated on document verification + human approval).
+   blocks, causal roll rule, partition proposal (still PROPOSED_NOT_ACTIVE
+   as the neutral source artifact). **Partitions were subsequently ACTIVATED
+   for DEV/SELECTION only on 2026-08-20 (AL-0067) via
+   `config/data/partitions_active.yaml`, published create-once from approved
+   candidate `5d9fc036…` under human approval AL-0064; HOLDOUT and FORWARD
+   remain mechanically sealed and no normalization has begun.**
 1. **Foundation — implemented, `PENDING_INDEPENDENT_AUDIT`**: DuckDB
    experiment registry with immutable §37 lifecycle (`nqr exp
    register/show/list/transition`; per-experiment committed record dirs;
    append-only lifecycle audit; §47 reproducibility capture); fail-closed
-   mechanical holdout fence (`nqresearch/holdout.py` — no active partitions
-   ⇒ all research range requests refused; no override path exists);
+   mechanical holdout fence (`nqresearch/holdout.py` — DEV/SELECTION active
+   since AL-0067, every HOLDOUT-touching or out-of-range request refused; no
+   override path exists);
    raw-write guard (`nqresearch/rawguard.py`, enforced in artifact/cache
    writers). The holdout fence is builder work only and must pass a
    fresh-session adversarial audit before Milestone 1 is certified.

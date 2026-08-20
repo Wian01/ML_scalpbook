@@ -660,10 +660,18 @@ Current state reference: §6a/§6b/§6c and audit-log AL-0028/AL-0039.
    explicit reviewed decision on the pending dates. Until then: effective
    calendar, MBO blocks, and partition dates stay
    PROVISIONAL_DOCUMENT_VERIFICATION_PENDING.
-2. **Partition activation** — the proposal is structurally valid (all gates
-   PASS) but PROPOSED_NOT_ACTIVE with activation_ready=false; requires
-   document verification (item 1) plus explicit human approval. The holdout
-   boundary 2026-04-01 remains TENTATIVE until that approval. **The
+2. **Partition activation — COMPLETE for DEV/SELECTION (2026-08-20,
+   AL-0067).** `config/data/partitions_active.yaml` (SHA-256 `e3126133…`)
+   was published create-once from approved candidate `5d9fc036…` under human
+   approval AL-0064. **DEV 2024-08-19 → 2025-11-07 and SELECTION
+   2025-11-10 → 2026-03-31 are ACTIVE; HOLDOUT 2026-04-01 → 2026-08-14 and
+   FORWARD remain mechanically SEALED** — the holdout range is bound only so
+   the fence knows what to refuse, and `holdout_opening()` still refuses
+   unconditionally. The neutral `partition_proposal.json` is unchanged and
+   still PROPOSED_NOT_ACTIVE with activation_ready=false. The ten
+   evidence-pending dates remain quarantined (309 eligible DEV sessions), no
+   normalization has begun, and the session-filtered loader is still
+   unimplemented. **The
    activation mechanism itself is specified by
    [PA-0003](protocol-amendments/PA-0003-activation-binding-and-publication.md)**
    (authoritative): the approved artifact is a SEPARATE

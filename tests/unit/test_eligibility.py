@@ -785,24 +785,54 @@ class TestSeparationFromRolls:
 
 
 class TestHoldoutStillFailsClosed:
-    def test_no_active_partitions_and_fence_refuses(self):
+    """CHANGED STATE (AL-0067): DEV and SELECTION are now ACTIVE, so the fence
+    permits them. What must never change is that HOLDOUT stays sealed and the
+    research API exposes no raw paths."""
+
+    def test_active_configuration_loads_and_binds_al0064(self):
         from nqresearch.config import _repo_root
-        from nqresearch.holdout import (
-            PartitionsNotActiveError,
-            load_active_partitions,
+        from nqresearch.holdout import load_active_partitions
+
+        assert (_repo_root() / "config" / "data"
+                / "partitions_active.yaml").is_file()
+        parts = load_active_partitions()
+        assert parts.activated is True
+        assert parts.approval.approval_reference == "AL-0064"
+
+    def test_research_api_permits_dev_but_never_exposes_paths(self):
+        from nqresearch.holdout import HoldoutAccessError
+        from nqresearch.research import (
+            ResearchLoaderNotImplementedError,
+            research_eligible_sessions,
+            research_input_entries,
         )
 
-        assert not (_repo_root() / "config" / "data"
-                    / "partitions_active.yaml").is_file()
-        with pytest.raises(PartitionsNotActiveError):
-            load_active_partitions()
+        # DEV is permitted and returns SESSION IDS, never file paths.
+        sessions = research_eligible_sessions(date(2024, 10, 1),
+                                              date(2024, 10, 31))
+        assert sessions and all(isinstance(x, str) for x in sessions)
+        assert not any("/" in x or "\\" in x for x in sessions)
+        # HOLDOUT is still refused.
+        with pytest.raises(HoldoutAccessError):
+            research_eligible_sessions(date(2026, 4, 1), date(2026, 4, 30))
+        # The session-filtered reader is still unimplemented: no raw UTC-day
+        # path is ever returned as research data.
+        with pytest.raises(ResearchLoaderNotImplementedError):
+            research_input_entries(date(2024, 10, 1), date(2024, 10, 31))
 
-    def test_research_api_still_refuses_and_exposes_no_paths(self):
-        from nqresearch.holdout import PartitionsNotActiveError
-        from nqresearch.research import research_eligible_sessions
+    def test_all_ten_quarantined_dates_stay_ineligible_when_active(self):
+        sessions = set(research_eligible_sessions_dev())
+        assert not (set(REAL_TEN) & sessions)
 
-        with pytest.raises(PartitionsNotActiveError):
-            research_eligible_sessions(date(2024, 10, 1), date(2024, 10, 31))
+    def test_exactly_309_eligible_dev_sessions(self):
+        assert len(research_eligible_sessions_dev()) == 309
+
+
+def research_eligible_sessions_dev():
+    """All eligible sessions across the whole ACTIVE DEV range."""
+    from nqresearch.research import research_eligible_sessions
+
+    return research_eligible_sessions(date(2024, 8, 19), date(2025, 11, 7))
 
 
 def _synth_repo_with_status(root, real_policy, status):
@@ -931,27 +961,59 @@ class TestPolicyApprovalIsNotCandidateApproval:
                 datetime(2026, 8, 20, 0, 0, 0, tzinfo=timezone.utc))
         msg = str(exc.value)
         assert "lifecycle state" not in msg, msg
-        assert "human-approval audit entry" in msg, msg
+        # CHANGED STATE (AL-0067): an activation now exists, so create-once
+        # refuses first. Before activation the blocking reason was the missing
+        # human-approval entry; either way publication is impossible.
+        assert "already exists" in msg, msg
 
-    def test_no_partitions_active_yaml_exists(self):
+    def test_active_configuration_exists_and_is_create_once(self, tmp_path):
+        import hashlib
+
+        from nqresearch.activation import (
+            ActivationError,
+            generate_active_partitions,
+        )
         from nqresearch.config import _repo_root
 
-        assert not (_repo_root() / "config" / "data"
-                    / "partitions_active.yaml").is_file()
+        p = _repo_root() / "config" / "data" / "partitions_active.yaml"
+        assert p.is_file()
+        before = hashlib.sha256(p.read_bytes()).hexdigest()
+        with pytest.raises(ActivationError, match="already exists"):
+            generate_active_partitions(
+                "Wian", "AL-0064",
+                datetime(2026, 8, 20, 5, 12, 27, tzinfo=timezone.utc))
+        assert hashlib.sha256(p.read_bytes()).hexdigest() == before
+        assert not p.with_name(p.name + ".tmp").exists()
 
-    def test_fence_and_research_api_still_fail_closed(self):
+    def test_fence_permits_dev_selection_and_refuses_holdout(self):
         from nqresearch.holdout import (
-            PartitionsNotActiveError,
+            HoldoutAccessError,
+            HoldoutFenceError,
             assert_research_range_allowed,
             load_active_partitions,
         )
-        from nqresearch.research import research_input_entries
+        from nqresearch.research import (
+            ResearchLoaderNotImplementedError,
+            research_input_entries,
+        )
 
-        with pytest.raises(PartitionsNotActiveError):
-            load_active_partitions()
-        with pytest.raises(PartitionsNotActiveError):
-            assert_research_range_allowed(date(2024, 10, 1), date(2024, 10, 31))
-        with pytest.raises(PartitionsNotActiveError):
+        load_active_partitions()                       # accepted
+        assert_research_range_allowed(date(2024, 10, 1), date(2024, 10, 31))
+        assert_research_range_allowed(date(2026, 1, 5), date(2026, 2, 5))
+        assert_research_range_allowed(date(2024, 8, 19), date(2026, 3, 31))
+        for a, b in [(date(2026, 4, 1), date(2026, 4, 1)),
+                     (date(2026, 8, 14), date(2026, 8, 14)),
+                     (date(2026, 3, 31), date(2026, 4, 1)),
+                     (date(2024, 8, 19), date(2026, 12, 31))]:
+            with pytest.raises(HoldoutAccessError):
+                assert_research_range_allowed(a, b)
+        for a, b in [(date(2026, 8, 17), date(2026, 8, 31)),
+                     (date(2024, 1, 1), date(2024, 6, 1))]:
+            with pytest.raises(HoldoutFenceError):
+                assert_research_range_allowed(a, b)
+        # The fence passes for DEV, then the unimplemented M2 loader refuses:
+        # no raw UTC-day path is ever returned.
+        with pytest.raises(ResearchLoaderNotImplementedError):
             research_input_entries(date(2024, 10, 1), date(2024, 10, 31))
 
     def test_holdout_opening_still_refuses_unconditionally(self):
@@ -1292,27 +1354,44 @@ class TestRealCandidateApprovalRecord:
         root = self._synthetic_log(tmp_path, append_after_log=block)
         _verify_approval_bound_to_audit_record(self._parts(), root)  # no raise
 
-    def test_approving_the_candidate_does_not_create_an_active_config(self):
+    def test_active_config_binds_exactly_this_approval(self):
+        # CHANGED STATE (AL-0067): the active configuration now exists and
+        # must bind EXACTLY the approval this class describes.
+        import yaml as _yaml
+
         from nqresearch.config import _repo_root
 
-        assert not (_repo_root() / "config" / "data"
-                    / "partitions_active.yaml").is_file()
+        p = _repo_root() / "config" / "data" / "partitions_active.yaml"
+        assert p.is_file()
+        doc = _yaml.safe_load(p.read_text(encoding="utf-8"))
+        assert doc["approval"]["approval_reference"] == self.APPROVAL_REF
+        assert doc["approval"]["approved_by"] == self.APPROVER
+        assert doc["activation_candidate_sha256"] == \
+            self.IDENT["activation_candidate_sha256"]
+        for k, v in self.IDENT.items():
+            assert doc[k] == v, k
+        for name, (a, b) in self.RANGES.items():
+            assert (doc[name]["start"], doc[name]["end"]) == (a, b), name
 
-    def test_holdout_remains_sealed_after_approval(self):
+    def test_holdout_remains_sealed_after_activation(self):
         from nqresearch.holdout import (
+            HoldoutAccessError,
             HoldoutFenceError,
-            PartitionsNotActiveError,
             assert_research_range_allowed,
             holdout_opening,
             load_active_partitions,
         )
 
-        # No active configuration exists, so the fence still refuses
-        # everything, and the opening workflow refuses unconditionally.
-        with pytest.raises(PartitionsNotActiveError):
-            load_active_partitions()
-        with pytest.raises(PartitionsNotActiveError):
-            assert_research_range_allowed(date(2024, 10, 1), date(2024, 10, 31))
+        # The configuration loads (DEV/SELECTION are active) but every
+        # HOLDOUT-touching range is refused, and the opening workflow refuses
+        # unconditionally.
+        load_active_partitions()
+        assert_research_range_allowed(date(2024, 10, 1), date(2024, 10, 31))
+        h0, h1 = (date.fromisoformat(x) for x in self.RANGES["holdout"])
+        for a, b in [(h0, h0), (h1, h1), (h0, h1),
+                     (date(2026, 3, 31), h0)]:
+            with pytest.raises(HoldoutAccessError):
+                assert_research_range_allowed(a, b)
         with pytest.raises(HoldoutFenceError, match="not implemented"):
             holdout_opening()
 

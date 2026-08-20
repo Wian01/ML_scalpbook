@@ -88,47 +88,36 @@ def _approval_entry(entry_id, identities, ranges=RANGES, approver=APPROVER,
 
 
 class TestLiveRefusal:
-    """Against the REAL repository, ACTIVATION must remain impossible.
+    """Against the REAL repository, RE-activation must remain impossible.
 
-    CHANGED REQUIREMENT (2026-08-20, AL-0062): the twelve artifacts were
-    regenerated from the clean approved-policy commit and a structurally-ready
-    candidate now exists, so the previous refusal reason ("artifacts are
-    stale") no longer applies and the mechanical preconditions legitimately
-    HOLD. What must not change is the SAFETY property, and it is pinned harder
-    here than before: the ONLY remaining gate is explicit human approval of
-    the exact candidate, so `generate_active_partitions()` must still refuse
-    and no `partitions_active.yaml` may exist. Read-only entry points that
-    merely verify or build a payload in memory may now succeed.
+    CHANGED STATE (2026-08-20, AL-0067): DEV and SELECTION are now ACTIVE
+    under approval AL-0064. The safety property has therefore MOVED, not
+    weakened: activation is create-once, so every activation entry point -
+    including the read-only ones, whose preconditions require that no active
+    configuration exist - must now refuse, and the published file must be
+    impossible to overwrite or mutate. The candidate itself must remain
+    untouched, still declaring activation_ready=false.
     """
 
     @pytest.mark.parametrize("fn", [verify_activation_preconditions,
                                     finalize_activation_candidate])
-    def test_read_only_entry_points_now_hold(self, fn):
-        # These neither write nor activate anything; after regeneration the
-        # preconditions genuinely hold.
-        result = fn()
-        assert isinstance(result, dict) and result
-
-    def test_finalized_candidate_payload_is_never_self_certifying(self):
-        payload = finalize_activation_candidate()
-        assert payload["state"] == CANDIDATE_STATE_READY
-        assert payload["structural_ready"] is True
-        assert payload["activation_ready"] is False
-        assert payload["research_eligibility_policy_state"] == \
-            "APPROVED_FOR_ACTIVATION"
-        assert payload["calendar_verification_state"] == \
-            "PROVISIONAL_PENDING_DATES_QUARANTINED"
-        assert len(payload["quarantined_dates"]) == 10
+    def test_read_only_entry_points_refuse_once_activated(self, fn):
+        # CHANGED STATE (AL-0067): an activation now EXISTS, and precondition
+        # step 10 requires that none does. Building a fresh candidate while a
+        # partition configuration is live would invite a silent re-activation,
+        # so both read-only entry points correctly refuse.
+        with pytest.raises(ActivationError, match="already exists"):
+            fn()
 
     def test_generate_active_partitions_refuses_live(self):
-        # THE remaining gate: no human has approved this exact candidate, so
-        # there is no audit entry the approval reference can resolve to.
+        # Create-once: publication is refused because an activation exists.
         with pytest.raises(ActivationError) as exc:
             generate_active_partitions(APPROVER, "AL-9999", STAMP)
-        assert "human-approval audit entry" in str(exc.value)
-        assert isinstance(exc.value.__cause__, PartitionsNotActiveError)
+        assert "already exists" in str(exc.value)
 
-    def test_live_policy_is_approved_but_that_alone_activates_nothing(self):
+    def test_live_active_configuration_binds_al0064(self):
+        import yaml as _yaml
+
         from nqresearch.config import _repo_root
         from nqresearch.eligibility import (
             NON_ACTIVATION_POLICY_STATES,
@@ -136,21 +125,47 @@ class TestLiveRefusal:
             load_policy,
         )
 
-        # The POLICY gate is cleared...
         assert load_policy().meta.status == POLICY_STATE_APPROVED
         assert load_policy().meta.status not in NON_ACTIVATION_POLICY_STATES
-        # ...and activation is still impossible: no active configuration, and
-        # the generator refuses for want of candidate approval.
-        assert not (_repo_root() / "config" / "data"
-                    / "partitions_active.yaml").is_file()
-        with pytest.raises(ActivationError):
-            generate_active_partitions(APPROVER, "AL-9999", STAMP)
+        p = _repo_root() / "config" / "data" / "partitions_active.yaml"
+        assert p.is_file()
+        doc = _yaml.safe_load(p.read_text(encoding="utf-8"))
+        assert doc["activated"] is True
+        assert doc["approval"]["approval_reference"] == "AL-0064"
+        assert doc["approval"]["approved_by"] == "Wian"
+        assert doc["approval"]["approved_at_utc"] == "2026-08-20T05:12:27Z"
 
-    def test_no_real_active_configuration_exists(self):
+    def test_live_candidate_still_declares_activation_ready_false(self):
+        # Activation NEVER rewrites the candidate: it still asserts mechanical
+        # readiness only.
+        import json as _json
+
+        from nqresearch import paths
+        from nqresearch.holdout import CANDIDATE_ARTIFACT_FILENAME
+
+        doc = _json.loads((paths.data_root() / "qa" / "m0_closeout"
+                           / CANDIDATE_ARTIFACT_FILENAME).read_text(
+                               encoding="utf-8"))
+        assert doc["state"] == CANDIDATE_STATE_READY
+        assert doc["structural_ready"] is True
+        assert doc["activation_ready"] is False
+        assert doc["research_eligibility_policy_state"] == \
+            "APPROVED_FOR_ACTIVATION"
+        assert doc["calendar_verification_state"] == \
+            "PROVISIONAL_PENDING_DATES_QUARANTINED"
+        assert len(doc["quarantined_dates"]) == 10
+
+    def test_active_file_cannot_be_overwritten_or_mutated(self):
+        import hashlib
+
         from nqresearch.config import _repo_root
 
-        assert not (_repo_root() / "config" / "data"
-                    / "partitions_active.yaml").is_file()
+        p = _repo_root() / "config" / "data" / "partitions_active.yaml"
+        before = hashlib.sha256(p.read_bytes()).hexdigest()
+        with pytest.raises(ActivationError, match="already exists"):
+            generate_active_partitions(APPROVER, "AL-0064", STAMP)
+        assert hashlib.sha256(p.read_bytes()).hexdigest() == before
+        assert not p.with_name(p.name + ".tmp").exists()
 
     def test_no_override_force_or_bypass_parameter_exists(self):
         for fn in (verify_activation_preconditions,
