@@ -8,7 +8,7 @@ is never decoded.
 
 import inspect
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import yaml
@@ -960,10 +960,12 @@ class TestPolicyApprovalIsNotCandidateApproval:
         with pytest.raises(HoldoutFenceError, match="not implemented"):
             holdout_opening()
 
-    def test_no_candidate_approval_decision_exists_in_the_audit_log(self):
-        # The PA-0003 machine-readable candidate decision is reserved for a
-        # LATER human approval of an exact generated candidate. Approving the
-        # policy must never have written one.
+    def test_exactly_one_candidate_approval_decision_exists(self):
+        # CHANGED REQUIREMENT (AL-0064): the project owner approved the exact
+        # candidate, so the reserved decision line now legitimately EXISTS.
+        # It must exist exactly ONCE, carry exactly the reserved value, and
+        # live under exactly AL-0064 — a second one anywhere would make
+        # approval ambiguous.
         import re
 
         from nqresearch.config import _repo_root
@@ -971,12 +973,16 @@ class TestPolicyApprovalIsNotCandidateApproval:
 
         text = (_repo_root() / "docs" / "implementation-audit-log.md").read_text(
             encoding="utf-8")
-        decisions = [ln for ln in text.splitlines()
-                     if re.match(r"^\s*-\s*decision\s*:", ln)]
-        assert decisions == [], decisions
-        assert not any(re.match(r"^\s*-\s*decision\s*:\s*"
-                                + re.escape(APPROVAL_DECISION_VALUE), ln)
-                       for ln in text.splitlines())
+        lines = text.splitlines()
+        idx = [i for i, ln in enumerate(lines)
+               if re.match(r"^\s*-\s*decision\s*:", ln)]
+        assert len(idx) == 1, [lines[i] for i in idx]
+        assert re.fullmatch(r"-\s*decision:\s*" + re.escape(
+            APPROVAL_DECISION_VALUE), lines[idx[0]].strip()), lines[idx[0]]
+        # ...and it sits inside AL-0064, not any other entry.
+        heading = next(lines[i] for i in range(idx[0], -1, -1)
+                       if lines[i].startswith("## AL-"))
+        assert heading.startswith("## AL-0064 "), heading
 
     def test_neutral_proposal_state_constant_is_still_required(self):
         # The generator can only ever emit the neutral state for the proposal.
@@ -988,3 +994,231 @@ class TestPolicyApprovalIsNotCandidateApproval:
         assert '"state": "PROPOSED_NOT_ACTIVE"' in src
         assert '"activation_ready": False' in src
         assert '"activation_ready": True' not in src
+
+
+class TestRealCandidateApprovalRecord:
+    """AL-0064 is the real, committed human approval of candidate 5d9fc036.
+    These assertions run the PRODUCTION verifier against an IN-MEMORY
+    ActivePartitions model; they never call the publication path and never
+    write config/data/partitions_active.yaml."""
+
+    APPROVAL_REF = "AL-0064"
+    APPROVER = "Wian"
+    IDENT = {
+        "activation_candidate_sha256":
+            "5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32",
+        "partition_proposal_sha256":
+            "24a555d6c45e691fe1838b7d7691059dce7bd6c7d07a55d5623e891a35a906fb",
+        "effective_calendar_sha256":
+            "ca2edfe6c2d05007c35837341ac73de955d8df6fd7821410307bf7fc18a3d010",
+        "evidence_matrix_sha256":
+            "f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250",
+        "cme_correspondence_sha256":
+            "67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0",
+        "research_eligibility_sha256":
+            "b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f",
+        "coverage_artifact_sha256":
+            "3230d9c28bb62d814fdf2d6c03054968b932d05f3de509a77dcbf4dc0432ba31",
+        "mbo_blocks_sha256":
+            "24862c197de32885f30ef976cbf258ab95b4aacaf31d8eb539e298d07d361da9",
+        "front_contract_series_sha256":
+            "d3d618a63c9623696b0a0f9c97b8d077e27bbb4f3cf48b23603f0d53121e960b",
+    }
+    RANGES = {"dev": ("2024-08-19", "2025-11-07"),
+              "selection": ("2025-11-10", "2026-03-31"),
+              "holdout": ("2026-04-01", "2026-08-14")}
+
+    def _stamp(self):
+        """The approval instant, read from the real AL-0064 record."""
+        import re
+
+        from nqresearch.config import _repo_root
+
+        text = (_repo_root() / "docs" / "implementation-audit-log.md").read_text(
+            encoding="utf-8")
+        entry = text.split("## AL-0064 ")[1].split("\n## ")[0]
+        m = re.search(r"^-\s*approved_at_utc:\s*(\S+)\s*$", entry, re.M)
+        assert m, "AL-0064 must record approved_at_utc"
+        return datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc)
+
+    def _parts(self, **over):
+        from nqresearch.holdout import ActivePartitions
+
+        payload = {
+            "activated": True,
+            "approval": {"approved_by": self.APPROVER,
+                         "approval_reference": self.APPROVAL_REF,
+                         "approved_at_utc": self._stamp()},
+            **self.IDENT,
+            "dev": {"start": self.RANGES["dev"][0],
+                    "end": self.RANGES["dev"][1]},
+            "selection": {"start": self.RANGES["selection"][0],
+                          "end": self.RANGES["selection"][1]},
+            "holdout": {"start": self.RANGES["holdout"][0],
+                        "end": self.RANGES["holdout"][1]},
+        }
+        payload.update(over)
+        return ActivePartitions(**payload)
+
+    def test_real_approval_record_validates(self):
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import _verify_approval_bound_to_audit_record
+
+        # Must not raise: all nine hashes, the three ranges, the approver, the
+        # exact UTC instant, the disposition and the calendar state agree.
+        _verify_approval_bound_to_audit_record(self._parts(), _repo_root())
+
+    def test_approval_timestamp_is_whole_second_utc(self):
+        stamp = self._stamp()
+        assert stamp.tzinfo is not None
+        assert stamp.utcoffset() == timedelta(0)
+        assert stamp.microsecond == 0
+
+    @pytest.mark.parametrize("field", sorted(IDENT))
+    def test_each_wrong_identity_is_refused(self, field):
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        with pytest.raises(PartitionsNotActiveError, match=field):
+            _verify_approval_bound_to_audit_record(
+                self._parts(**{field: "0" * 64}), _repo_root())
+
+    @pytest.mark.parametrize("name", ["dev", "selection", "holdout"])
+    def test_each_wrong_range_is_refused(self, name):
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        a, b = self.RANGES[name]
+        shifted = {"dev": {"start": "2024-08-20", "end": b},
+                   "selection": {"start": a, "end": "2026-03-30"},
+                   "holdout": {"start": "2026-04-02", "end": b}}[name]
+        with pytest.raises(PartitionsNotActiveError,
+                           match=f"{name}_range"):
+            _verify_approval_bound_to_audit_record(
+                self._parts(**{name: shifted}), _repo_root())
+
+    @pytest.mark.parametrize("approver", ["Someone Else", "wian", "WIAN", ""])
+    def test_wrong_approver_is_refused(self, approver):
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        with pytest.raises(Exception):
+            _verify_approval_bound_to_audit_record(
+                self._parts(approval={"approved_by": approver,
+                                      "approval_reference": self.APPROVAL_REF,
+                                      "approved_at_utc": self._stamp()}),
+                _repo_root())
+
+    def test_wrong_timestamp_is_refused(self):
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        with pytest.raises(PartitionsNotActiveError, match="approved_at_utc"):
+            _verify_approval_bound_to_audit_record(
+                self._parts(approval={
+                    "approved_by": self.APPROVER,
+                    "approval_reference": self.APPROVAL_REF,
+                    "approved_at_utc": self._stamp() + timedelta(seconds=1)}),
+                _repo_root())
+
+    @pytest.mark.parametrize("ref,why", [
+        ("AL-0063", "a different entry"),
+        ("AL-0065", "a different entry"),
+        ("AL-00640", "prefix attack"),
+        ("AL-064", "malformed"),
+        ("AL-0064 (approved)", "malformed"),
+        (" AL-0064", "malformed"),
+        ("al-0064", "malformed"),
+    ])
+    def test_wrong_or_malformed_reference_is_refused(self, ref, why):
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        with pytest.raises(PartitionsNotActiveError):
+            _verify_approval_bound_to_audit_record(
+                self._parts(approval={"approved_by": self.APPROVER,
+                                      "approval_reference": ref,
+                                      "approved_at_utc": self._stamp()}),
+                _repo_root())
+
+    def test_duplicate_approval_field_is_refused(self, tmp_path):
+        # A synthetic copy of the REAL entry with one field repeated must be
+        # refused as ambiguous. The live log is never modified.
+        import shutil
+
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        root = tmp_path / "repo"
+        (root / "docs").mkdir(parents=True)
+        (root / "config" / "data").mkdir(parents=True)
+        src = _repo_root() / "docs" / "implementation-audit-log.md"
+        text = src.read_text(encoding="utf-8")
+        line = next(ln for ln in text.splitlines()
+                    if ln.strip().startswith("- decision:"))
+        (root / "docs" / "implementation-audit-log.md").write_text(
+            text + "\n" + line + "\n", encoding="utf-8")
+        with pytest.raises(PartitionsNotActiveError, match="duplicate"):
+            _verify_approval_bound_to_audit_record(self._parts(), root)
+        assert shutil  # keep the import meaningful
+
+    def test_approving_the_candidate_does_not_create_an_active_config(self):
+        from nqresearch.config import _repo_root
+
+        assert not (_repo_root() / "config" / "data"
+                    / "partitions_active.yaml").is_file()
+
+    def test_holdout_remains_sealed_after_approval(self):
+        from nqresearch.holdout import (
+            HoldoutFenceError,
+            PartitionsNotActiveError,
+            assert_research_range_allowed,
+            holdout_opening,
+            load_active_partitions,
+        )
+
+        # No active configuration exists, so the fence still refuses
+        # everything, and the opening workflow refuses unconditionally.
+        with pytest.raises(PartitionsNotActiveError):
+            load_active_partitions()
+        with pytest.raises(PartitionsNotActiveError):
+            assert_research_range_allowed(date(2024, 10, 1), date(2024, 10, 31))
+        with pytest.raises(HoldoutFenceError, match="not implemented"):
+            holdout_opening()
+
+    def test_approved_holdout_range_would_still_be_refused_by_the_fence(self):
+        # The approval binds the HOLDOUT range so the fence knows what to
+        # REFUSE — never as permission. Proven on the pure range logic.
+        from nqresearch.holdout import HoldoutAccessError, _check_range
+
+        parts = self._parts()
+        h0, h1 = (date.fromisoformat(x) for x in self.RANGES["holdout"])
+        for a, b in [(h0, h0), (h1, h1), (h0, h1),
+                     (date.fromisoformat(self.RANGES["dev"][0]), h1)]:
+            with pytest.raises(HoldoutAccessError):
+                _check_range(a, b, parts)
+        # ...while DEV and SELECTION are inside the permitted union.
+        d0, d1 = (date.fromisoformat(x) for x in self.RANGES["dev"])
+        s0, s1 = (date.fromisoformat(x) for x in self.RANGES["selection"])
+        _check_range(d0, d1, parts)
+        _check_range(s0, s1, parts)
+        _check_range(d0, s1, parts)
