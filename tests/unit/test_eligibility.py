@@ -905,33 +905,33 @@ class TestPolicyApprovalIsNotCandidateApproval:
         from nqresearch.activation import (
             ActivationError,
             generate_active_partitions,
-            verify_activation_preconditions,
         )
 
-        for call in (
-            verify_activation_preconditions,
-            lambda: generate_active_partitions(
+        # Writing the active configuration is the step that would actually
+        # activate; it must refuse.
+        with pytest.raises(ActivationError):
+            generate_active_partitions(
                 "nobody", "AL-0060",
-                datetime(2026, 8, 20, 0, 0, 0, tzinfo=timezone.utc)),
-        ):
-            with pytest.raises(ActivationError):
-                call()
+                datetime(2026, 8, 20, 0, 0, 0, tzinfo=timezone.utc))
 
-    def test_refusal_reason_is_stale_artifacts_not_a_missing_gate(self):
-        # The policy gate is genuinely cleared now, so the FIRST refusal is
-        # the stale-artifact one. This pins the expected staleness rather
-        # than letting a silent regression pass as "still refusing".
+    def test_refusal_reason_is_missing_candidate_approval(self):
+        # CHANGED REQUIREMENT (AL-0062): the artifacts have been regenerated
+        # from the clean approved-policy commit, so "stale artifacts" is no
+        # longer the blocking reason. The ONLY remaining gate is explicit
+        # human approval of the exact candidate. Pinning the reason keeps a
+        # silent regression from passing as "still refusing".
         from nqresearch.activation import (
             ActivationError,
-            verify_activation_preconditions,
+            generate_active_partitions,
         )
 
         with pytest.raises(ActivationError) as exc:
-            verify_activation_preconditions()
+            generate_active_partitions(
+                "nobody", "AL-0060",
+                datetime(2026, 8, 20, 0, 0, 0, tzinfo=timezone.utc))
         msg = str(exc.value)
         assert "lifecycle state" not in msg, msg
-        assert ("different effective configuration" in msg
-                or "different package code" in msg), msg
+        assert "human-approval audit entry" in msg, msg
 
     def test_no_partitions_active_yaml_exists(self):
         from nqresearch.config import _repo_root

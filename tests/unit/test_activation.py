@@ -88,36 +88,48 @@ def _approval_entry(entry_id, identities, ranges=RANGES, approver=APPROVER,
 
 
 class TestLiveRefusal:
-    """Against the REAL repository every activation entry point must REFUSE,
-    and the refusal must surface as `ActivationError` — the module's public
-    contract and the type the CLI catches (AL-0061).
+    """Against the REAL repository, ACTIVATION must remain impossible.
 
-    CHANGED REQUIREMENT (2026-08-20, AL-0060): the project owner approved
-    PA-0002, so the policy lifecycle gate is now legitimately cleared and the
-    refusal reason moved. The SAFETY property is unchanged and still pinned
-    here — activation is still impossible — and the new expected reason (the
-    twelve artifacts are stale under the new effective config hash) is
-    asserted explicitly, so a silent regression cannot pass as "still
-    refusing".
+    CHANGED REQUIREMENT (2026-08-20, AL-0062): the twelve artifacts were
+    regenerated from the clean approved-policy commit and a structurally-ready
+    candidate now exists, so the previous refusal reason ("artifacts are
+    stale") no longer applies and the mechanical preconditions legitimately
+    HOLD. What must not change is the SAFETY property, and it is pinned harder
+    here than before: the ONLY remaining gate is explicit human approval of
+    the exact candidate, so `generate_active_partitions()` must still refuse
+    and no `partitions_active.yaml` may exist. Read-only entry points that
+    merely verify or build a payload in memory may now succeed.
     """
 
     @pytest.mark.parametrize("fn", [verify_activation_preconditions,
                                     finalize_activation_candidate])
-    def test_refuses_live_because_artifacts_are_stale(self, fn):
-        with pytest.raises(ActivationError) as exc:
-            fn()
-        msg = str(exc.value)
-        assert "lifecycle state" not in msg, msg
-        assert ("different effective configuration" in msg
-                or "different package code" in msg), msg
-        # The original fail-closed cause is preserved, not discarded.
-        assert isinstance(exc.value.__cause__, PartitionsNotActiveError)
+    def test_read_only_entry_points_now_hold(self, fn):
+        # These neither write nor activate anything; after regeneration the
+        # preconditions genuinely hold.
+        result = fn()
+        assert isinstance(result, dict) and result
+
+    def test_finalized_candidate_payload_is_never_self_certifying(self):
+        payload = finalize_activation_candidate()
+        assert payload["state"] == CANDIDATE_STATE_READY
+        assert payload["structural_ready"] is True
+        assert payload["activation_ready"] is False
+        assert payload["research_eligibility_policy_state"] == \
+            "APPROVED_FOR_ACTIVATION"
+        assert payload["calendar_verification_state"] == \
+            "PROVISIONAL_PENDING_DATES_QUARANTINED"
+        assert len(payload["quarantined_dates"]) == 10
 
     def test_generate_active_partitions_refuses_live(self):
-        with pytest.raises(ActivationError):
+        # THE remaining gate: no human has approved this exact candidate, so
+        # there is no audit entry the approval reference can resolve to.
+        with pytest.raises(ActivationError) as exc:
             generate_active_partitions(APPROVER, "AL-9999", STAMP)
+        assert "human-approval audit entry" in str(exc.value)
+        assert isinstance(exc.value.__cause__, PartitionsNotActiveError)
 
     def test_live_policy_is_approved_but_that_alone_activates_nothing(self):
+        from nqresearch.config import _repo_root
         from nqresearch.eligibility import (
             NON_ACTIVATION_POLICY_STATES,
             POLICY_STATE_APPROVED,
@@ -127,14 +139,12 @@ class TestLiveRefusal:
         # The POLICY gate is cleared...
         assert load_policy().meta.status == POLICY_STATE_APPROVED
         assert load_policy().meta.status not in NON_ACTIVATION_POLICY_STATES
-        # ...and activation is still impossible, with no candidate and no
-        # active configuration anywhere.
-        from nqresearch.config import _repo_root
-
+        # ...and activation is still impossible: no active configuration, and
+        # the generator refuses for want of candidate approval.
         assert not (_repo_root() / "config" / "data"
                     / "partitions_active.yaml").is_file()
         with pytest.raises(ActivationError):
-            verify_activation_preconditions()
+            generate_active_partitions(APPROVER, "AL-9999", STAMP)
 
     def test_no_real_active_configuration_exists(self):
         from nqresearch.config import _repo_root
@@ -1080,20 +1090,47 @@ class TestCliRefusesCleanly:
         assert "[activation] REFUSED: synthetic refusal" in out
         assert "Traceback" not in out
 
-    def test_cli_refuses_against_the_live_stale_artifacts(self, capsys):
-        # End-to-end against the REAL repository: the artifacts are stale, so
-        # the CLI must refuse cleanly. It reads the existing QA artifacts
-        # read-only and never reaches the artifact-writing branch.
-        from nqresearch import paths
-        from nqresearch.cli import main
-        from nqresearch.holdout import CANDIDATE_ARTIFACT_FILENAME
+    def test_cli_refusal_path_is_the_only_non_zero_exit(self):
+        # The CLI's refusal branch catches exactly ActivationError and returns
+        # 1; nothing else in the part can produce a traceback-free non-zero.
+        #
+        # NOTE (AL-0062): this deliberately does NOT invoke the CLI against the
+        # live tree. The preconditions now hold, so running the part would
+        # REWRITE partition_activation_candidate.json with a fresh timestamp
+        # and change its SHA-256 — the very identity a human is about to
+        # approve. The live candidate is inspected read-only instead.
+        import inspect
 
-        target = paths.data_root() / "qa" / "m0_closeout" / CANDIDATE_ARTIFACT_FILENAME
-        assert not target.is_file(), "a real candidate must not exist"
-        code = main(["data", "audit", "--part",
-                     "finalize-activation-candidate"])
-        out = capsys.readouterr().out
-        assert code == 1
-        assert "[activation] REFUSED:" in out
-        assert "Traceback" not in out
-        assert not target.is_file(), "the CLI must not have written a candidate"
+        from nqresearch.cli import main
+
+        src = inspect.getsource(main.__module__ and __import__(
+            "nqresearch.cli", fromlist=["main"]))
+        block = src.split('if part == "finalize-activation-candidate":')[1]
+        block = block.split("overall =")[0]
+        assert "except ActivationError as e:" in block
+        assert "[activation] REFUSED:" in block
+        assert "return 1" in block
+
+    def test_live_candidate_is_ready_but_not_activation_ready(self):
+        # Read-only inspection of the generated candidate; never rewrites it.
+        import hashlib
+
+        from nqresearch import paths
+        from nqresearch.holdout import (
+            CANDIDATE_ARTIFACT_FILENAME,
+            _verify_activation_candidate,
+        )
+
+        target = (paths.data_root() / "qa" / "m0_closeout"
+                  / CANDIDATE_ARTIFACT_FILENAME)
+        if not target.is_file():
+            pytest.skip("no candidate has been generated yet")
+        raw = target.read_bytes()
+        doc = json.loads(raw.decode("utf-8"))
+        assert doc["state"] == CANDIDATE_STATE_READY
+        assert doc["structural_ready"] is True
+        assert doc["activation_ready"] is False
+        assert doc["generation_git_clean"] is True
+        _verify_activation_candidate(doc)          # strict schema
+        # Its identity is stable and non-empty; approval binds THIS SHA.
+        assert len(hashlib.sha256(raw).hexdigest()) == 64
