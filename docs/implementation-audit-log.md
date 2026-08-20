@@ -3625,3 +3625,168 @@ in by the entry that creates the initial commit.
   PA-0002 transition prepared in AL-0060 is carried forward untouched.
 
 - **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0062 — PA-0002 approval committed (`2ad4467`); all 12 artifacts regenerated from the clean tree; activation CANDIDATE generated (candidate approval NOT given)
+
+- **Category:** protocol-relevant decision record + artifact regeneration +
+  activation-candidate generation. AL-0055 through AL-0061 and every earlier
+  entry are unchanged. **No partition is activated by this entry.**
+
+- **Immutable implementation commit:** `2ad446776082bdc108dceed33c94ab5d31530fcc`
+  ("Approve PA-0002 eligibility quarantine and normalize activation
+  refusals"), parent `1c91117f03d57e08fd6958ffbac9156d70b1013f`. It contains
+  EXACTLY the eight independently reviewed files: `CLAUDE.md`,
+  `config/data/research_eligibility.yaml`, `docs/data-specification.md`,
+  `docs/holdout-policy.md`, `docs/implementation-audit-log.md`,
+  `src/nqresearch/activation.py`, `tests/unit/test_activation.py`,
+  `tests/unit/test_eligibility.py`. Pre-commit verification proved the staged
+  set was exactly those eight, that no `data/` path, QA artifact, candidate,
+  `partitions_active.yaml` or canonical spec was staged, that the staged
+  audit-log diff was `238 0` (append-only), and that
+  `git diff --cached --check` passed. The commit is NOT amended.
+
+- **Shared identities of every regenerated artifact:** git_sha `2ad446776082bdc108dceed33c94ab5d31530fcc`,
+  `generation_git_clean: true`, config hash
+  `3d4ad51132b60c612b6212ca058fcc04243bd371c40b82f8ef1dd17fe7958fbd`, package hash
+  `39eea4a5e93f31096fe96037d7414bc40a8a70af8fc684fcbe93196b34134a0c`. Live `require_provenance()` PASSES.
+
+- **All 12 artifacts (SHA-256 / status):**
+
+  ```text
+  acquisition (<data_root>/qa/mbp1_full_history/)
+    9cb7e452d950b15aae5c4487506605563af8468098972ca59dc78111ac6af041  WARN  mbp1_source_inventory
+    eb80d58d23025586119b311b414217682d7e4710f2b7a628a23c886ea080ffa3  PASS  mbp1_manifest_validation
+    cd30346047a11301c32b1a0e00eda2b7b337dd2888248d59acb32a5dbaaeb9c5  PASS  mbp1_range_adjacency
+    5c5b19653e5a0a34403631e6ff1facaa1d98c4dfc247be0529b68e82ac203155  WARN  mbp1_sample_overlap
+    5c64cd43ac8d92a83594490b75981aae991dcbf71de4b0c2a6e5f6cd44d26a26  PASS  mbp1_sample_overlap_record_level
+    e28f321a3e92bd930ad3a729d5479d01e609df286307949471c83e4c1842307f  PASS  mbp1_source_selection
+    1b2cd619641ae52a239d1dcdc7e2a54d0758f09ae359877ab4961f5ee512c2d8  WARN  storage_gate
+    50abae55367ff3569d08bbf676e7e5298f998aaba4fd9386073c75ff00c51818  PASS  mbp1_acquisition_gate
+  closeout (<data_root>/qa/m0_closeout/)
+    3230d9c28bb62d814fdf2d6c03054968b932d05f3de509a77dcbf4dc0432ba31  WARN  mbp1_full_history_coverage
+    d3d618a63c9623696b0a0f9c97b8d077e27bbb4f3cf48b23603f0d53121e960b  PASS  mbp1_front_contract_series
+    24862c197de32885f30ef976cbf258ab95b4aacaf31d8eb539e298d07d361da9  PASS  mbo_blocks_frozen
+    24a555d6c45e691fe1838b7d7691059dce7bd6c7d07a55d5623e891a35a906fb  PASS  partition_proposal
+  ```
+
+  The three WARNs are the established understood ones: vendor "degraded"
+  condition flags in the source inventory, the explained container-metadata
+  file-hash difference in the sample overlap, and free space between the 1 TB
+  required and 2 TB preferred thresholds.
+
+- **Regeneration order and the intermediate FAIL (recorded, not hidden).**
+  Order: `mbp1-acquisition` → `mbp1-overlap-records` → `mbp1-coverage` →
+  `closeout-finalize` → `finalize-activation-candidate`. The FIRST write of
+  `mbp1_acquisition_gate` came out **FAIL** on exactly one of its nine checks,
+  `record_evidence_bound_to_current_config`, because the record-level overlap
+  evidence was still stamped under the previous config hash `48c2d27a…`. That
+  is the expected intermediate state of the dependency order — the eight other
+  checks passed — and regenerating the record-level artifact and rewriting the
+  gate cleared it to PASS. A full re-decode occurred as expected, the QA cache
+  having been invalidated by the config-hash change.
+
+- **Substantive results reconfirmed:**
+  - acquisition gate **PASS, 9/9** checks;
+  - manifests **642/642** files checked, PASS;
+  - record-level overlap **11/11 pairs**, `all_records_identical: true`,
+    **115,583,040** records compared, every file identical;
+  - source selection PASS: **zero** sample files leaked into research input,
+    zero partitions owned by non-eligible sources, 625 research files,
+    unique partitions, 2024-08-18 → 2026-08-16;
+  - coverage the exact understood **WARN**: 516 expected sessions, `n_fail` 0,
+    `missing_sessions` [], `cross_file_order_violations` 0, and
+    `missing_pre_rth_short_sessions` exactly `["2025-04-18"]`;
+  - causal front series **PASS**, **8 switches**, no 2026-08-17 edge session;
+  - MBO blocks **PASS**, **77 sessions / 30 blocks**;
+  - neutral partition proposal **PASS**, still `PROPOSED_NOT_ACTIVE` with
+    `activation_ready=false`, calendar `PROVISIONAL_PENDING_DATES_QUARANTINED`,
+    DEV/SELECTION/HOLDOUT **318/100/98** trading days, MBO sessions
+    **23/23/31**, blocks **8/11/11**, **SPANNING 0**, all binding checks PASS;
+  - quarantine unchanged: **10** dates / **8** observed DEV exclusions /
+    **309** eligible DEV sessions (317 observed of 318 DEV trading days);
+  - storage **1,720.7 GB free** of 2,048.4 GB, above the 1,000 GB required
+    minimum (WARN only against the 2,000 GB preferred level).
+
+- **ACTIVATION CANDIDATE GENERATED** at
+  `<data_root>/qa/m0_closeout/partition_activation_candidate.json`
+  (4,926 bytes). Verified: `state: READY_FOR_ACTIVATION_APPROVAL`,
+  `structural_ready: true`, **`activation_ready: false`**,
+  calendar state `PROVISIONAL_PENDING_DATES_QUARANTINED`, policy state
+  `APPROVED_FOR_ACTIVATION`, evidence disposition
+  `PENDING_DATES_QUARANTINED`, status PASS, the exact ten quarantined dates,
+  a clean committed-tree envelope bound to `2ad4467`, and it passes the
+  STRICT `ActivationCandidate` schema.
+
+- **THE NINE IDENTITIES for the later human-approval decision** (candidate
+  plus its eight dependencies, each verified equal to the freshly regenerated
+  evidence):
+
+  ```text
+  activation_candidate_sha256    5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32
+  partition_proposal_sha256      24a555d6c45e691fe1838b7d7691059dce7bd6c7d07a55d5623e891a35a906fb
+  effective_calendar_sha256      ca2edfe6c2d05007c35837341ac73de955d8df6fd7821410307bf7fc18a3d010
+  evidence_matrix_sha256         f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250
+  cme_correspondence_sha256      67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0
+  research_eligibility_sha256    b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f
+  coverage_artifact_sha256       3230d9c28bb62d814fdf2d6c03054968b932d05f3de509a77dcbf4dc0432ba31
+  mbo_blocks_sha256              24862c197de32885f30ef976cbf258ab95b4aacaf31d8eb539e298d07d361da9
+  front_contract_series_sha256   d3d618a63c9623696b0a0f9c97b8d077e27bbb4f3cf48b23603f0d53121e960b
+  ```
+
+- **POLICY approval is COMPLETE; CANDIDATE approval has NOT occurred.** The
+  PA-0002 research-eligibility policy is `APPROVED_FOR_ACTIVATION` and that
+  approval is now committed. **No human has approved this candidate.** Under
+  PA-0003 activation additionally requires an append-only audit entry
+  recording explicit human approval of THIS candidate's exact SHA-256
+  alongside all nine identities, the exact ranges, the approver and a
+  whole-second UTC instant, the disposition and the calendar state — carrying
+  the reserved machine-readable decision line, **which is deliberately absent
+  from this entry** and is not authorised now — and only then
+  `config/data/partitions_active.yaml`.
+
+- **Tests retargeted (rule 7 — changed requirement, documented).** Six tests
+  written in the AL-0060/AL-0061 rounds asserted the STALE-artifact world
+  (that `verify_activation_preconditions()` and
+  `finalize_activation_candidate()` refuse, and that no candidate file
+  exists). The authorised regeneration legitimately changed those facts: the
+  mechanical preconditions now HOLD and a candidate exists. They are
+  retargeted, NOT relaxed — the SAFETY property is pinned harder than before:
+  the read-only entry points (which neither write nor activate) may now
+  succeed, while `generate_active_partitions()` must still refuse and the
+  test now asserts the refusal reason is specifically the missing
+  **human-approval audit entry**, with `PartitionsNotActiveError` preserved as
+  the chained cause. A new test asserts the finalized payload is still
+  `READY_FOR_ACTIVATION_APPROVAL` / `structural_ready=true` /
+  **`activation_ready=false`**, and another inspects the on-disk candidate
+  read-only against the strict schema.
+  **Deliberate change:** the live CLI end-to-end test was replaced with a
+  source-level assertion on the refusal branch plus a read-only candidate
+  check, because invoking that CLI part now SUCCEEDS and would REWRITE
+  `partition_activation_candidate.json` with a fresh timestamp — changing the
+  very SHA-256 a human is about to approve. The synthetic
+  injected-refusal CLI test (exit code 1, `[activation] REFUSED: …`, no
+  traceback) is unchanged and still passes.
+
+- **Safety confirmations:** **no `config/data/partitions_active.yaml`
+  exists**; the mechanical fence still fails closed
+  (`load_active_partitions()` refuses); **HOLDOUT remains sealed** and no
+  HOLDOUT or FORWARD market records were accessed, enumerated or decoded; no
+  normalization, feature, label, sample, dataset, model or experiment work
+  occurred; raw vendor data was read only through the audited decode paths
+  and is byte-unchanged; nothing under `D:\projects` or
+  `D:\futures-data-research-s3-backup` was read, scanned, hashed, modified or
+  deleted.
+
+- **Verification:** full unit suite **1222/1222** passing; `git diff
+  --check` clean; the working tree was completely clean at regeneration time,
+  which is what allows `generation_git_clean: true`.
+
+- **Files changed after the implementation commit:**
+  `tests/unit/test_activation.py` and `tests/unit/test_eligibility.py` (the
+  six retargeted tests above) plus `docs/implementation-audit-log.md` (this
+  entry). No source file, configuration file or protocol document changed
+  after `2ad4467`.
+
+- **Commit:** this entry is committed separately as an audit-log-only commit
+  immediately after `2ad4467`; that implementation commit is NOT amended.
+  Nothing has been pushed.
