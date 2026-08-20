@@ -2849,3 +2849,474 @@ in by the entry that creates the initial commit.
   12 artifacts stamped at `37e38db2…` remain valid.
 - **Commit:** this entry is the audit-log-only commit; no implementation
   commit was amended. Nothing pushed.
+
+## AL-0055 — Activation tooling implemented for review; storage-unit error corrected; approval binding hardened
+
+- **Category:** review finding + correction of my own reporting error +
+  implementation for review. AL-0047 through AL-0054 and all earlier entries
+  are unchanged. **No activation occurred and the policy remains
+  unapproved.**
+- **(1) CORRECTION — the reported ~118 GB storage loss was MY UNIT ERROR.**
+  The readiness review compared 1,602.6 **GiB** (my ad-hoc `/1024**3`
+  calculation) against 1,720.7 decimal **GB** (what `storage_gate.json`
+  deliberately reports, `1 GB = 1e9 bytes`) and wrongly concluded that ~118
+  GB had been consumed. Verified this round: free space is
+  **1,720,742,952,960 bytes = 1,602.6 GiB = 1,720.7 GB**, and the live
+  `storage_gate.json` figure of 1,720.7 GB matches the current volume state
+  exactly. **No space was lost and nothing was consumed.** No deletion or
+  cleanup is authorised or recommended anywhere on the data volume;
+  `D:\nq-research` and `D:\futures-data-research-s3-backup` are untouched,
+  and `D:\projects` is out of scope and was never read.
+- **(2) SEPARATION OF POWERS — candidate state.** A generated artifact can
+  never self-certify that a human approved its exact bytes, because its own
+  SHA-256 does not exist while it is being written. Activation now requires
+  three independent records: (a) a structurally-ready CANDIDATE
+  (`state=READY_FOR_ACTIVATION_APPROVAL`, `structural_ready=true`,
+  `activation_ready=false`); (b) a separately committed append-only
+  human-approval entry binding the candidate's exact SHA and every
+  dependency; (c) `config/data/partitions_active.yaml`. The verifier was
+  updated coherently: it now REFUSES any artifact declaring
+  `activation_ready=true` (self-certification), requires
+  `structural_ready` to be boolean true, and requires the exact candidate
+  state. The proposal generator still emits the neutral
+  `PROPOSED_NOT_ACTIVE` and can never emit an approved artifact.
+- **(3) NEW fail-closed tooling — `src/nqresearch/activation.py`:**
+  `verify_activation_preconditions()` re-verifies the policy lifecycle
+  (exactly `APPROVED_FOR_ACTIVATION`), the policy/evidence-matrix binding,
+  all ten pending dates exactly quarantined with every state still truthfully
+  `PENDING_EVIDENCE`, the quarantine structural invariants and frozen corpus
+  counts, the clean CURRENT committed envelope of every activation-bound
+  artifact, the coverage substance digest AND the exact coverage file
+  identity, the exact understood 2025-04-18 coverage WARN, the causal front
+  series (PASS, 8 switches, no 2026-08-17 edge), MBO blocks (PASS, 77/30),
+  every partition structural check with SPANNING empty, and the exact
+  DEV/SELECTION/HOLDOUT ranges and counts (318/100/98, 23/23/31); it also
+  refuses if an active configuration already exists.
+  `finalize_activation_candidate()` builds the candidate payload;
+  `generate_active_partitions()` writes the active configuration and refuses
+  unless the candidate and a valid, already-committed approval entry both
+  exist and agree on every identity. **There is no override, force, bypass,
+  alternate policy path, or caller-supplied relaxed state anywhere**
+  (signature-tested), and nothing in the module opens or enumerates
+  HOLDOUT/raw records (source-scanned). CLI:
+  `nqr data audit --part finalize-activation-candidate`.
+  **Against the live repository all three entry points REFUSE today**, because
+  the policy is still `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` — verified
+  live and regression-tested.
+- **(4) Human-approval binding hardened.** The entry must now bind ALL
+  EIGHT identities — the previously missing **effective calendar SHA-256**
+  plus proposal, evidence matrix, CME correspondence, research-eligibility
+  policy, coverage, MBO blocks and front series — and additionally the exact
+  DEV/SELECTION/HOLDOUT ranges, `approved_by`, the exact UTC timestamp, an
+  explicit statement approving PA-0002 and this exact candidate, and the
+  quarantine disposition and calendar state. `approval_reference` must be
+  the exact `AL-\d{4}` form resolving to EXACTLY ONE `## AL-nnnn` heading:
+  prefix attacks are refused (AL-0055 can never match AL-00550, enforced by
+  a line-anchored non-digit boundary), duplicate headings are refused, and
+  missing or ambiguous entries are refused. The approving identity and
+  timestamp in `partitions_active.yaml` must match the audit entry exactly.
+- **Defect found and fixed while testing the above:** the calendar constant
+  `PROVISIONAL_PENDING_DATES_QUARANTINED` CONTAINS the disposition constant
+  `PENDING_DATES_QUARANTINED` as a substring, so a naive membership test let
+  the calendar line silently satisfy the disposition requirement. The
+  verifier now strips every occurrence of the calendar state before checking
+  that the disposition is recorded INDEPENDENTLY.
+- **(5) Eventual sequence (documented, NOT executed) — separate review
+  gates:** Commit A reviewed tooling while the policy stays unapproved →
+  independent review + push → explicit human approval to transition PA-0002
+  → Commit B policy transition + its approval record → regenerate the 12
+  artifacts ONCE from the clean approved-policy commit → produce the
+  immutable structurally-ready candidate → independent review of every final
+  artifact and identity → explicit human approval of the exact candidate →
+  Commit C audit-log-only exact-candidate approval → independent
+  verification → Commit D `partitions_active.yaml` → mechanically verify
+  DEV/SELECTION access and HOLDOUT refusal. **Policy approval is never
+  combined with unreviewed tooling.**
+- **(6) Cache and storage policy:** cache scoping is deliberately NOT
+  redesigned during activation preparation. `qa/cache.py` keys on the
+  effective config hash, so approving the policy will invalidate all caches
+  and force one full re-decode (5,401,908,864 coverage records and
+  115,583,040 overlap records). That cost is accepted as correct under the
+  current strict cache identity rather than introducing a new cache-validity
+  model mid-flight. Storage remains ~1,720.7 decimal GB free, far above the
+  1 TB minimum; the next regeneration may add caches and remains safely
+  above it. No caches or data were deleted.
+- **(7) October pilot treatment recorded (pilot NOT started):** the research
+  normalization pilot remains **October 2025 only** (23 sessions, all in DEV,
+  no quarantined date). **MBO-BLK-008 spans 2025-10-30 → 2025-11-07 and is
+  NOT an October-only block.** Block-level MBO validation must either
+  exclude MBO-BLK-008 from an October-only validation, or extend a separate
+  QA-ONLY reconstruction window through 2025-11-07. Extending that QA window
+  must never extend the research pilot or alter its session set.
+- **Files changed:** NEW `src/nqresearch/activation.py`, NEW
+  `tests/unit/test_activation.py`; modified `src/nqresearch/holdout.py`
+  (candidate-state constants and semantics, eight-identity approval binding,
+  exact/unique heading resolution, independent disposition check),
+  `src/nqresearch/cli.py` (new fail-closed part),
+  `tests/unit/test_holdout_fence.py` (candidate-shaped fixtures, complete
+  approval entry, self-certification and structural_ready regressions).
+  No configuration file changed; the policy is untouched.
+- **Verification:** full suite **1033/1033 pass** (was 985); `git diff
+  --check` clean. **No real artifact regenerated; no real
+  `partitions_active.yaml` exists; the policy remains
+  IMPLEMENTED_PENDING_ACTIVATION_APPROVAL; the partition proposal remains
+  PROPOSED_NOT_ACTIVE with activation_ready=false; the calendar remains
+  PROVISIONAL_PENDING_DATES_QUARANTINED.** Raw vendor data, all 45 calendar
+  evidence files and HOLDOUT/FORWARD were untouched; no normalization,
+  feature, label, sample, dataset, model or experiment work occurred. All
+  tests requiring activation files used temporary synthetic directories only.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0056 — Activation candidate remediation: distinct nine-identity binding, strict candidate substance, machine-readable approval, no path injection, atomic write, end-to-end synthetic proof
+
+- **Category:** remediation of blocking review findings against the AL-0055
+  activation tooling. AL-0055 and every earlier entry are unchanged. **No
+  activation occurred, no artifact was regenerated, the research-eligibility
+  policy remains unapproved, and `config/data/partitions_active.yaml` still
+  does not exist.**
+- **(1) BLOCKING DEFECT FIXED — the candidate had no identity of its own.**
+  The active configuration bound only `partition_proposal_sha256`, so the
+  artifact a human actually approves (the activation CANDIDATE) was either
+  unbound or disguised as the neutral proposal's hash. Activation now binds
+  **NINE** identities: a new, distinct `activation_candidate_sha256` field
+  plus the eight underlying dependencies
+  (`UNDERLYING_IDENTITY_FIELDS` in `src/nqresearch/holdout.py`). The
+  fence reads the CANONICAL `partition_activation_candidate.json`, verifies
+  its exact bytes against `activation_candidate_sha256`, its declared
+  artifact type, and its clean committed provenance envelope BEFORE trusting
+  any of its content; it then verifies
+  `state=READY_FOR_ACTIVATION_APPROVAL`, `structural_ready=true`,
+  `activation_ready=false`, and that its eight bound identities equal the
+  ones the active configuration binds. **The neutral
+  `partition_proposal.json` is verified SEPARATELY and must still be
+  `PROPOSED_NOT_ACTIVE` with `activation_ready=false`** — a relabelled
+  proposal is now refused explicitly ("must remain independently
+  identifiable"), so one artifact can never stand in for both the mechanical
+  source and the approved candidate.
+- **(2) The candidate's COMPLETE substance is now validated, not sampled.**
+  New strict Pydantic model `ActivationCandidate` (`extra="forbid"` at every
+  level, `StrictBool`/`StrictInt`, `Literal` artifact/state/status, an exact
+  eight-key `bound_identities` sub-model) refuses unknown, missing or
+  malformed fields instead of trusting only the fields the verifier happens
+  to read. The bespoke state checks still run FIRST so their fail-closed
+  reasons stay legible. On top of the schema, every substantive field is
+  compared against evidence **recomputed at verification time**: the
+  disposition, the live policy lifecycle state, the live quarantined-date
+  set, the freshly recomputed structural-quarantine facts, the neutral
+  proposal's checks and MBO distributions, and the exact DEV/SELECTION/HOLDOUT
+  ranges (which must agree across the active configuration, the candidate AND
+  the neutral proposal). `_verify_calendar_evidence()` now RETURNS
+  `(disposition, policy, quarantine_facts)` for exactly this purpose.
+  `generate_active_partitions()` additionally rebuilds the entire expected
+  candidate payload from freshly proven preconditions and refuses if any key
+  differs, naming the differing keys.
+- **(3) Human approval is now mechanically unambiguous.** The audit entry
+  must carry each required value EXACTLY ONCE as `- key: value`:
+  `decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE` (a loose "APPROVE"
+  substring is no longer sufficient and never matches "DO NOT APPROVE",
+  "NOT APPROVED" or "APPROVAL REFUSED"), `activation_candidate_sha256`, all
+  eight dependency identities, `dev_range`/`selection_range`/`holdout_range`,
+  `approved_by`, `approved_at_utc`, `quarantine_disposition` and
+  `calendar_state`. Any duplicate declaration of a required key is refused as
+  ambiguous — identical repeats included. `approval_reference` must satisfy
+  `re.fullmatch(r"AL-\d{4}")` and resolve to EXACTLY ONE line-anchored
+  `## AL-nnnn` heading with a non-identifier boundary, so AL-0055 can never
+  match AL-00550 and duplicate headings are refused. Fields belonging to a
+  NEIGHBOURING entry can no longer complete an incomplete approval
+  (regression test).
+- **(4) Public path/root injection removed.** `verify_activation_preconditions()`
+  now takes NO parameters, `finalize_activation_candidate()` takes NO
+  parameters, and `generate_active_partitions()` takes only
+  `(approved_by, approval_reference, approved_at_utc)`. The
+  caller-supplied `candidate_path` is GONE — the candidate path is canonical
+  and derived from the data root. All injection moved to private
+  `_verify_activation_preconditions_from` /
+  `_finalize_activation_candidate_from` / `_generate_active_partitions_from`,
+  whose roots are required positional parameters with no defaults.
+  Signature-tested in both directions.
+- **(5) Crash-safe atomic activation write.** `_atomic_write_text()` writes to
+  an exclusively-created sibling `*.tmp`, flushes and `fsync`s it, re-checks
+  that the target still does not exist, then `os.replace()`s atomically; any
+  failure unlinks the temp file. A pre-existing stale `.tmp` is refused
+  rather than overwritten. Failure-injection tests simulate a write error and
+  an `fsync` error and prove neither the target nor the temp file survives,
+  plus a race test proving a target that appears mid-write is never
+  clobbered.
+- **(6) NEW end-to-end synthetic success test.** `conftest.full_corpus_tree()`
+  builds a COMPLETE synthetic repository and data root that satisfies every
+  frozen corpus invariant (516 expected sessions; 318/100/98 trading days;
+  317 observed DEV sessions; 309 eligible; 8 excluded; 10 quarantined dates;
+  77 MBO sessions in 30 blocks distributed 23/23/31; 0 spanning; 8 causal
+  roll switches) under the PA-0002 quarantine disposition with an APPROVED
+  synthetic policy. `TestEndToEndSyntheticActivation` then runs the whole
+  chain: approved policy → mechanical candidate → canonical envelope path →
+  exact SHA-256 → machine-readable approval entry → `partitions_active.yaml`
+  written by the real generator → reload through the FULL public verifier →
+  DEV and SELECTION ranges permitted → every kind of HOLDOUT overlap refused
+  (start, end, whole span, straddles on both sides, envelopment) →
+  `holdout_opening()` still refuses unconditionally. It also proves the
+  neutral proposal is untouched and its hash differs from the candidate's,
+  that a second activation is refused, and that tampering with the candidate
+  breaks the reloaded fence. **This is a synthetic temporary tree only; the
+  real repository, the real data root, and the real policy are untouched.**
+- **(7) Live state re-verified after the change:** the policy is still
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`; all three public activation
+  entry points REFUSE against the live repository; the public fence and
+  research API still fail closed; the on-disk partition proposal is still
+  `PROPOSED_NOT_ACTIVE` with `activation_ready=false`; the calendar remains
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`; no
+  `partition_activation_candidate.json` and no `partitions_active.yaml`
+  exist anywhere.
+- **Unresolved risk / follow-up (NOT done here):** two governance documents
+  still describe the older, weaker approval binding —
+  `docs/protocol-amendments/PA-0002-research-eligibility-quarantine.md` §6
+  ("the exact partition-proposal, effective-calendar, evidence-matrix,
+  GCC-correspondence and research-eligibility-policy hashes") and
+  `docs/holdout-policy.md` §1 (same list). The IMPLEMENTED binding is
+  strictly STRONGER — nine identities (candidate + eight dependencies) plus
+  the exact ranges, approver, UTC timestamp, exact decision value,
+  disposition and calendar state — so neither document is contradicted, but
+  both understate what the code enforces. They should be brought up to date
+  through the normal amendment/review process rather than edited silently in
+  an implementation change.
+- **Files changed:** `src/nqresearch/holdout.py` (candidate schema and
+  verification, neutral-proposal verification, machine-readable approval
+  binding, `_verify_calendar_evidence` return value),
+  `src/nqresearch/activation.py` (private `_..._from` helpers, no-injection
+  public API, `_candidate_payload`, `_read_candidate`, `_atomic_write_text`,
+  complete-substance comparison), `tests/unit/conftest.py` (complete
+  provenance envelope; full synthetic corpus builder),
+  `tests/unit/test_holdout_fence.py` (candidate/proposal split, candidate
+  identity/substance/envelope regressions),
+  `tests/unit/test_activation.py` (machine-readable approval matrix,
+  signature tests, atomic-write failure injection, end-to-end activation).
+  No configuration file changed; no artifact regenerated.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0057 — Fourth-round activation remediation: strict `activated`, validated UTC approval instant, create-once atomic publication, PA-0003 documentation amendment
+
+- **Category:** remediation of four reproduced review findings against the
+  AL-0056 activation tooling, plus a protocol documentation amendment.
+  AL-0055, AL-0056 and every earlier entry are unchanged. **No activation
+  occurred, no artifact was regenerated, no real candidate exists, the
+  research-eligibility policy remains unapproved, and
+  `config/data/partitions_active.yaml` still does not exist.**
+
+- **(1) DEFECT FIXED - `activated` accepted coerced truthy values.**
+  `ActivePartitions.activated` was an ordinary `bool`, so pydantic's lax mode
+  accepted `1`, `"true"` and `"yes"` as an ACTIVE partition configuration -
+  the single flag that turns research data access on. It is now `StrictBool`,
+  and the model validator requires `self.activated is not True` to fail
+  rather than the previous truthiness test `if not self.activated`. Only the
+  literal YAML/Python boolean `true` can activate. Adversarial tests cover
+  `0`, `1`, `-1`, `"true"`, `"false"`, `"yes"`, `"no"`, `"True"`, `"False"`,
+  `"on"`, `"off"`, `""`, `"1"`, `"0"`, `None`, `[]`, `{}`, `[True]`,
+  `{"activated": True}`, `1.0` and `0.0`, plus a RAW-YAML variant that
+  exercises the loader itself (PyYAML's genuine boolean spellings `true`,
+  `yes`, `on`, `True` must load; `1` and `y` must fail closed). A reflective
+  test now walks EVERY pydantic model in `holdout.py` and asserts that no
+  `bool` field is lax - strictness lives in the field metadata
+  (`StrictBool == Annotated[bool, Strict()]`), not the annotation, so the
+  test inspects `field.metadata`. Audit result: the other activation-critical
+  booleans (`generation_git_clean`, `structural_ready`, `activation_ready`,
+  `tentative`) and the counts (`trading_days`,
+  `n_quarantined_calendar_dates`) were already strict from AL-0049/AL-0056;
+  `activated` was the only lax one.
+
+- **(2) DEFECT FIXED - the approval timestamp was formatted before it was
+  validated.** `generate_active_partitions()` called
+  `approved_at_utc.strftime("%Y-%m-%dT%H:%M:%SZ")` on the caller's raw value.
+  A `+08:00` wall time was therefore stamped with a literal `Z` WITHOUT
+  conversion, and the resulting string re-parsed cleanly through
+  `ApprovalRecord`, so the permanent record would have falsely claimed a
+  local time was UTC. New `activation._validated_utc_instant()` runs as the
+  FIRST statement of `_generate_active_partitions_from`, before any file is
+  read or written, and refuses unless the value is an actual `datetime`, is
+  timezone-aware, and has a UTC offset of exactly zero. **A non-UTC instant
+  is REFUSED, never converted and never relabelled** - converting silently
+  would also be wrong, because the approver's recorded intent is what must be
+  audited. The format string is now the shared constant
+  `APPROVAL_TIMESTAMP_FORMAT` and the payload uses the VALIDATED value, so
+  the audit entry and the generated YAML contain exactly the same UTC
+  instant. Tests: a valid UTC datetime; a zero-offset non-`timezone.utc`
+  tzinfo (accepted - same instant); naive; `+08:00`; `-05:00`; `+00:01`; a
+  `date`; two datetime-shaped strings; `None`; `0`; an int and a float epoch;
+  `True`; and a duck-typed object exposing `strftime()`/`utcoffset()`. A
+  source test asserts no unvalidated `approved_at_utc.strftime` remains.
+
+- **(3) DEFECT FIXED - the create-once publication race.** `_atomic_write_text`
+  checked `path.exists()` and then called `os.replace()`; a concurrent
+  creator winning that window would have had its activation silently
+  overwritten, because `os.replace()` overwrites by design. Publication now
+  uses `os.link()` - an atomic create-if-absent operation on NTFS and POSIX
+  alike, which raises `FileExistsError` (Windows `ERROR_ALREADY_EXISTS`) if
+  the destination exists. The intervening `exists()` check was REMOVED
+  entirely, so there is no window left to lose: the filesystem operation
+  itself is the guard. The complete bytes are still written to an
+  exclusively-created sibling `*.tmp` and `flush`+`fsync`ed BEFORE
+  publication, so the destination only ever appears carrying complete durable
+  content, and the temp entry is always removed afterwards. If the atomic
+  primitive is unavailable (e.g. `EXDEV`), the write is REFUSED rather than
+  falling back to an overwriting primitive. A surviving `*.tmp` still causes
+  a FUTURE fail-closed refusal rather than being silently reused. Race
+  regression: the test monkeypatches `os.link` itself so the destination is
+  created immediately before the real publication call, and proves the
+  existing file survives byte-for-byte; a second test creates the destination
+  inside `os.fsync`; a third asserts the source contains no
+  `os.replace`/`os.rename`/`shutil.move`/`.rename`/`.replace` (docstring and
+  comments excluded, since they name the rejected primitives deliberately);
+  a fourth injects `EXDEV` and proves refusal with no residue.
+
+- **(4) PROTOCOL DOCUMENTATION SYNCHRONISED WITHOUT REWRITING HISTORY.**
+  PA-0002 §6 and the earlier `docs/holdout-policy.md` §1 text describe the
+  five-hash activation binding. **Neither was edited**: they are approved
+  historical statements and are preserved verbatim. Instead a NEW amendment
+  `docs/protocol-amendments/PA-0003-activation-binding-and-publication.md`
+  is the authoritative description of the activation MECHANISM, recording:
+  the candidate / neutral-proposal separation and the rule that the neutral
+  proposal is never relabelled; all NINE bound hashes in a table; the exact
+  machine-readable approval fields verbatim (including
+  `- decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE` and why the calendar
+  state can never satisfy the disposition field); the strict-boolean rule;
+  the strict zero-offset UTC rule; and the create-once publication contract
+  with its six guaranteed properties. PA-0003 explicitly states it is NOT
+  activation approval, NOT approval of the PA-0002 eligibility policy, and
+  confers no permission to open HOLDOUT. Current-state documents now POINT to
+  it: `docs/holdout-policy.md` §1 (both the activation paragraph and the
+  PA-0002 paragraph), `docs/data-specification.md` §7 item 2, and the
+  `CLAUDE.md` current-status list.
+
+- **Verification (this round):** full suite **1162/1162 pass** (was 1104; +58);
+  the end-to-end synthetic activation test still passes through the REAL
+  generator and verifier; every coercive `activated` value fails; every
+  non-UTC or malformed approval timestamp fails; the create-once race cannot
+  overwrite an existing activation; `git diff --check` clean. Live state
+  re-verified read-only: policy `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`;
+  all three activation entry points REFUSE; `load_active_partitions()` and
+  `assert_research_range_allowed()` fail closed; the on-disk proposal is
+  `PROPOSED_NOT_ACTIVE` / `activation_ready=false` /
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`; no
+  `partition_activation_candidate.json`; no `partitions_active.yaml`; no
+  artifact or configuration file regenerated. Raw vendor data, calendar
+  evidence, HOLDOUT and FORWARD untouched; no normalization, feature, label,
+  sample, dataset, model or experiment work occurred. All tests used
+  temporary synthetic directories only; nothing under `D:\nq-research`,
+  `D:\projects` or `D:\futures-data-research-s3-backup` was read, written,
+  scanned or hashed.
+
+- **Files changed:** `src/nqresearch/holdout.py` (StrictBool `activated`,
+  exact-`True` validator), `src/nqresearch/activation.py`
+  (`APPROVAL_TIMESTAMP_FORMAT`, `_validated_utc_instant`, create-once
+  `_atomic_write_text`, validated stamp in the payload),
+  `tests/unit/test_holdout_fence.py` (coercive-`activated` matrix, raw-YAML
+  loader test, reflective strict-boolean audit),
+  `tests/unit/test_activation.py` (UTC-instant matrix, create-once race
+  regressions, primitive-source assertion), NEW
+  `docs/protocol-amendments/PA-0003-activation-binding-and-publication.md`,
+  `docs/holdout-policy.md`, `docs/data-specification.md`, `CLAUDE.md`,
+  `docs/implementation-audit-log.md`.
+
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0058 — Fifth-round activation remediation: whole-second approval instant, genuinely strict nested candidate schema, PA-0003 wording corrected to match the implementation
+
+- **Category:** remediation of two reproduced review findings against the
+  AL-0057 activation tooling, one of which was an inaccurate claim in my own
+  PA-0003 text. AL-0055, AL-0056, AL-0057 and every earlier entry are
+  unchanged. **No activation occurred, no artifact was regenerated, no real
+  candidate exists, the research-eligibility policy remains unapproved, and
+  `config/data/partitions_active.yaml` still does not exist.**
+
+- **(1) DEFECT FIXED — sub-second approval instants were silently truncated.**
+  `_validated_utc_instant()` accepted a zero-offset datetime carrying
+  microseconds, but `APPROVAL_TIMESTAMP_FORMAT` (`%Y-%m-%dT%H:%M:%SZ`) records
+  whole seconds only. The reviewer reproduced
+  `2026-08-21T09:30:00.987654+00:00` being written as `2026-08-21T09:30:00Z`
+  — **not the approved instant**, and worse, that string re-parses cleanly, so
+  nothing downstream could detect the loss. The format is deliberately fixed
+  to whole seconds so the approval record is byte-comparable, so the right
+  fix is to REFUSE the input rather than change the format or discard
+  precision: `microsecond != 0` now fails closed with an explicit instruction
+  to re-approve with a whole-second timestamp. Truncating or rounding
+  silently is exactly the failure mode this module exists to prevent.
+  A second, belt-and-braces guard proves the accepted value ROUND-TRIPS
+  through the fixed format unchanged, so no value that survives validation
+  can ever be recorded as a different instant — a future format change
+  cannot silently reintroduce the loss. Tests: whole-second UTC passes;
+  microseconds `1`, `2`, `500`, `999`, `1000`, `123456`, `987654`, `999999`
+  all fail; the exact reviewer-reproduced `.987654` case is asserted to
+  format identically to the whole-second stamp and is refused; and a
+  round-trip property test asserts that any accepted value re-parses to
+  exactly the validated input. The microsecond case was also added to the
+  generator-level refusal matrix, so `_generate_active_partitions_from`
+  refuses it before touching any file.
+
+- **(2) DEFECT FIXED — my PA-0003 strictness claim was stronger than the
+  implementation.** PA-0003 stated the candidate schema used
+  `extra="forbid"` "at every level". That was NOT true: `_CandidateCheck`
+  used `extra="allow"`, and `_CandidateProposal.FORWARD` plus three other
+  fields were plain `dict`. An invented field inside a structural check or
+  inside the FORWARD descriptor would have been carried silently.
+  Remediation, in the implementation first and only then in the wording:
+  `_CandidateCheck` now declares exactly `check` / `status` / `detail` (the
+  three fields `qa.status.check()` produces for the frozen structural checks)
+  with `extra="forbid"` and `detail` REQUIRED; a new `_CandidateForward`
+  model declares exactly `start` and `note` with `extra="forbid"` (FORWARD is
+  a start-only descriptor — it has no end, because everything past the
+  boundary is forward data);
+  and `_verify_activation_evidence` now additionally requires EXACT equality
+  between the candidate's raw `checks` and `proposal` mappings and the
+  neutral proposal's, so `trading_days`, `tentative` and the whole FORWARD
+  descriptor are compared literally rather than merely shape-checked.
+  The three genuinely free-form mappings that remain —
+  `structural_quarantine`, `mbo_sessions_per_partition` and
+  `mbo_blocks_per_partition`, whose interiors are DERIVED rather than fixed
+  — were already accepted only by exact equality against freshly recomputed
+  evidence, and a new test asserts that this set is exactly those three and
+  that each is named in the verifier.
+  **PA-0003 §3 was rewritten to state precisely what is enforced**: every
+  DECLARED Pydantic model (`ActivationCandidate`, `_CandidateProposal`,
+  `_CandidateRange`, `_CandidateForward`, `_CandidateCheck`,
+  `_CandidateIdentities`) forbids extras, while the remaining mapping
+  payloads are accepted only through exact equality with recomputed
+  evidence. The two mechanisms are described as complementary and neither is
+  claimed to do the other's job. Tests prove an invented field inside a check
+  (`severity`, `status_note`, `waived`), a check missing `detail`, and an
+  invented field inside FORWARD (`end`, `eligible`, `trading_days`) are all
+  refused, and a reflective test asserts `extra == "forbid"` on all six
+  models so the PA-0003 sentence cannot drift away from the code again.
+
+- **Documentation:** PA-0003 §3 (strictness, rewritten as above) and §6
+  (retitled "Strict UTC, whole-second approval instant", documenting both
+  silent-corruption modes and the round-trip guarantee);
+  `docs/holdout-policy.md` §1 summary now states the whole-second
+  requirement. PA-0002 and the historical five-hash sentences remain
+  untouched.
+
+- **Verification (this round):** full suite **1183/1183 pass** (was 1162; +21); the
+  end-to-end synthetic activation chain still passes through the REAL
+  generator and verifier; microsecond-bearing approval timestamps fail;
+  nested invented candidate fields fail; `git diff --check` clean. Live state
+  re-verified read-only: policy `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`;
+  all three activation entry points REFUSE; `load_active_partitions()` and
+  `assert_research_range_allowed()` fail closed; the on-disk proposal is
+  `PROPOSED_NOT_ACTIVE` / `activation_ready=false` /
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`; no
+  `partition_activation_candidate.json`; no `partitions_active.yaml`; no
+  artifact or configuration file regenerated. Raw vendor data, calendar
+  evidence, HOLDOUT and FORWARD untouched; no normalization, feature, label,
+  sample, dataset, model or experiment work occurred. All tests used
+  temporary synthetic directories only; no D: location was read, written,
+  scanned or hashed.
+
+- **Files changed:** `src/nqresearch/holdout.py` (`_CandidateForward`,
+  strict `_CandidateCheck`, exact-equality comparison of `checks`/`proposal`,
+  corrected `ActivationCandidate` docstring),
+  `src/nqresearch/activation.py` (microsecond refusal + round-trip guard),
+  `tests/unit/test_holdout_fence.py` (nested-strictness regressions, check
+  `detail`, reflective model audit), `tests/unit/test_activation.py`
+  (sub-second refusal matrix, reproduced truncation case, round-trip
+  property), `docs/protocol-amendments/PA-0003-activation-binding-and-publication.md`,
+  `docs/holdout-policy.md`, `docs/implementation-audit-log.md`.
+
+- **Commit:** none (stop-for-review rule); nothing pushed.

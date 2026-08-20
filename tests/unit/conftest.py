@@ -312,11 +312,13 @@ def eligibility_policy_doc(matrix_sha, dates=(), status=None,
 
 
 def clean_envelope():
-    """A provenance envelope satisfying the AL-0043/44/45 activation policy:
-    clean generation at a REAL ancestral commit of the project repository,
-    under the current effective config and package code."""
+    """A COMPLETE provenance envelope satisfying the AL-0043/44/45 activation
+    policy: clean generation at a REAL ancestral commit of the project
+    repository, under the current effective config and package code. Carries
+    all eight reserved envelope fields, as qa/report.py stamps them."""
     import subprocess
 
+    import nqresearch
     from nqresearch import paths
     from nqresearch.config import effective_config_hash
     from nqresearch.qa.cache import package_source_hash
@@ -324,12 +326,15 @@ def clean_envelope():
     sha = subprocess.run(["git", "-C", str(paths.ROOT), "rev-parse", "HEAD"],
                          capture_output=True, text=True).stdout.strip()
     return {
+        "generated_at_utc": "2099-01-01T00:00:00+00:00",
+        "nqresearch_version": nqresearch.__version__,
         "git_sha": sha,
         "generation_git_clean": True,
         "restamp_note": "Generated from a clean committed tree at the "
                         "recorded git_sha.",
-        "config_hash": effective_config_hash(),
         "audit_code_hash": package_source_hash(),
+        "config_hash": effective_config_hash(),
+        "data_root": "synthetic",
     }
 
 
@@ -366,3 +371,280 @@ def write_eligibility_policy(repo_root, matrix_sha, dates=(), doc=None):
         doc if doc is not None else eligibility_policy_doc(matrix_sha, dates),
         sort_keys=False))
     return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# A COMPLETE synthetic corpus that satisfies the frozen quarantine invariants
+# (516 / 318-100-98 / 317 / 309 / 8 / 77 / 30 / 0 / 8). Used by the end-to-end
+# activation test, which must exercise the real generator rather than a
+# hand-written active configuration. Synthetic temporary trees only.
+# ---------------------------------------------------------------------------
+
+QUARANTINED_DATES = (
+    "2024-09-02", "2024-11-29", "2025-01-01", "2025-01-20", "2025-02-17",
+    "2025-04-18", "2025-05-26", "2025-06-19", "2025-07-03", "2025-07-04",
+)
+# Exactly two of the ten have no observed session, so the frozen invariant
+# "8 excluded observed DEV sessions" holds.
+UNOBSERVED_QUARANTINED_DATES = ("2025-01-01", "2025-07-04")
+MANDATORY_PROPOSAL_CHECKS = ("boundaries_on_trading_days",
+                             "partition_ranges_contiguous",
+                             "no_partition_spanning_mbo_blocks")
+
+
+def _weekdays(start, end):
+    from datetime import timedelta
+
+    d = start
+    while d <= end:
+        if d.weekday() < 5:
+            yield d
+        d += timedelta(days=1)
+
+
+def _chunk(items, n_chunks):
+    base, rem = divmod(len(items), n_chunks)
+    out, i = [], 0
+    for k in range(n_chunks):
+        size = base + (1 if k < rem else 0)
+        out.append(items[i:i + size])
+        i += size
+    return out
+
+
+def _full_corpus_coverage(data_root, matrix_doc):
+    """Coverage agreeing with the matrix AND carrying exactly 317 observed DEV
+    sessions, eight of which are quarantined."""
+    from nqresearch.qa.closeout import PROPOSED_DEV_END, PROPOSED_DEV_START
+
+    quarantined = set(QUARANTINED_DATES)
+    sessions = {
+        d["date"]: {"session_id": d["date"],
+                    "rth_span_seconds": d["observed"]["rth_span_seconds"]}
+        for d in matrix_doc["dates"] if d["observed"]["session_present"]
+    }
+    lo, hi = PROPOSED_DEV_START.isoformat(), PROPOSED_DEV_END.isoformat()
+    n_dev = sum(1 for s in sessions if lo <= s <= hi)
+    for d in _weekdays(PROPOSED_DEV_START, PROPOSED_DEV_END):
+        if n_dev >= 317:
+            break
+        iso = d.isoformat()
+        if iso in sessions or iso in quarantined:
+            continue
+        sessions[iso] = {"session_id": iso, "rth_span_seconds": 23400.0}
+        n_dev += 1
+    assert n_dev == 317, n_dev
+    doc = {
+        **clean_envelope(),
+        "artifact": "mbp1_full_history_coverage",
+        "status": "WARN",
+        "n_expected_complete_sessions": 516,
+        "n_fail": 0,
+        "missing_sessions": [],
+        "cross_file_order_violations": 0,
+        "missing_pre_rth_short_sessions": ["2025-04-18"],
+        "checks": [
+            {"check": "no_missing_expected_sessions", "status": "PASS",
+             "detail": "synthetic"},
+            {"check": "pre_rth_short_sessions_without_data", "status": "WARN",
+             "detail": "synthetic understood WARN"},
+            {"check": "no_session_fails", "status": "PASS",
+             "detail": "synthetic"},
+            {"check": "degraded_dates_assessed", "status": "PASS",
+             "detail": "synthetic"},
+            {"check": "cross_file_monotonic_order", "status": "PASS",
+             "detail": "synthetic"},
+        ],
+        "sessions": [sessions[k] for k in sorted(sessions)],
+    }
+    close = data_root / "qa" / "m0_closeout"
+    close.mkdir(parents=True, exist_ok=True)
+    p = close / "mbp1_full_history_coverage.json"
+    p.write_text(json.dumps(doc, indent=2))
+    from nqresearch.calendar_evidence import (
+        COVERAGE_SUBSTANCE_ALGORITHM,
+        coverage_substance_sha256,
+    )
+
+    ref = matrix_doc["meta"]["observed_reference"]
+    ref["substance_digest_algorithm"] = COVERAGE_SUBSTANCE_ALGORITHM
+    ref["substance_sha256"] = coverage_substance_sha256(
+        json.loads(p.read_text()))
+    return p
+
+
+def _full_corpus_blocks(data_root):
+    """30 MBO blocks holding 77 sessions, distributed 23/23/31, none of them
+    a quarantined date and none spanning a partition boundary."""
+    from datetime import date
+
+    from nqresearch.qa.closeout import (
+        PROPOSED_DEV_END,
+        PROPOSED_HOLDOUT_END,
+        PROPOSED_HOLDOUT_START,
+        PROPOSED_SELECTION_END,
+        PROPOSED_SELECTION_START,
+    )
+
+    # DEV blocks start after the last quarantined DEV date (2025-07-04), so no
+    # block span can ever contain one.
+    plan = [
+        ("DEV", date(2025, 8, 1), PROPOSED_DEV_END, 9, 23),
+        ("SELECTION", PROPOSED_SELECTION_START, PROPOSED_SELECTION_END, 9, 23),
+        ("HOLDOUT", PROPOSED_HOLDOUT_START, PROPOSED_HOLDOUT_END, 12, 31),
+    ]
+    blocks, per_partition, n = [], {}, 0
+    for name, start, end, n_blocks, n_sessions in plan:
+        days = [d.isoformat() for d in _weekdays(start, end)][:n_sessions]
+        assert len(days) == n_sessions, (name, len(days))
+        ids = []
+        for chunk in _chunk(days, n_blocks):
+            n += 1
+            bid = f"MBO-BLK-{n:03d}"
+            ids.append(bid)
+            blocks.append({"mbo_lab_block_id": bid, "start": chunk[0],
+                           "end": chunk[-1], "n_sessions": len(chunk),
+                           "sessions": chunk})
+        per_partition[name] = ids
+    per_partition["SPANNING"] = []
+    doc = {**clean_envelope(), "artifact": "mbo_blocks_frozen", "status": "PASS",
+           "blocks": blocks, "n_blocks": len(blocks),
+           "n_sessions_final": sum(b["n_sessions"] for b in blocks)}
+    assert doc["n_blocks"] == 30 and doc["n_sessions_final"] == 77
+    p = data_root / "qa" / "m0_closeout" / "mbo_blocks_frozen.json"
+    p.write_text(json.dumps(doc, indent=2))
+    return p, per_partition
+
+
+def _full_corpus_front_series(data_root):
+    """Eight causal roll switches, none decided from a quarantined session and
+    none touching the 2026-08-17 partial edge session."""
+    switches = [
+        {"session_id": s, "decided_from_session": d, "front": "NQZ4"}
+        for s, d in [
+            ("2024-09-13", "2024-09-12"), ("2024-12-13", "2024-12-12"),
+            ("2025-03-14", "2025-03-13"), ("2025-06-13", "2025-06-12"),
+            ("2025-09-12", "2025-09-11"), ("2025-12-12", "2025-12-11"),
+            ("2026-03-13", "2026-03-12"), ("2026-06-12", "2026-06-11"),
+        ]
+    ]
+    assert not (set(s["decided_from_session"] for s in switches)
+                & set(QUARANTINED_DATES))
+    doc = {**clean_envelope(), "artifact": "mbp1_front_contract_series",
+           "status": "PASS",
+           "rule": "strictly CAUSAL front/roll rule (decided from the prior "
+                   "completed session only)",
+           "switches": switches, "n_switches": len(switches),
+           "per_session": []}
+    p = data_root / "qa" / "m0_closeout" / "mbp1_front_contract_series.json"
+    p.write_text(json.dumps(doc, indent=2))
+    return p
+
+
+def _full_corpus_proposal(data_root, per_partition, cal_state):
+    from nqresearch.qa.closeout import (
+        PROPOSED_DEV_END,
+        PROPOSED_DEV_START,
+        PROPOSED_HOLDOUT_END,
+        PROPOSED_HOLDOUT_START,
+        PROPOSED_SELECTION_END,
+        PROPOSED_SELECTION_START,
+    )
+
+    close = data_root / "qa" / "m0_closeout"
+    sha = {
+        "coverage_artifact_sha256": hashlib.sha256(
+            (close / "mbp1_full_history_coverage.json").read_bytes()
+        ).hexdigest(),
+        "mbo_blocks_sha256": hashlib.sha256(
+            (close / "mbo_blocks_frozen.json").read_bytes()).hexdigest(),
+        "front_contract_series_sha256": hashlib.sha256(
+            (close / "mbp1_front_contract_series.json").read_bytes()
+        ).hexdigest(),
+    }
+    doc = {
+        **clean_envelope(),
+        "artifact": "partition_proposal",
+        # The neutral proposal is NEVER relabelled: the activation candidate
+        # is a separate artifact with its own identity.
+        "state": "PROPOSED_NOT_ACTIVE",
+        "activation_ready": False,
+        "calendar_verification_state": cal_state,
+        "research_eligibility_binding": {"structural_artifact_sha256": sha},
+        "proposal": {
+            "DEV": {"start": PROPOSED_DEV_START.isoformat(),
+                    "end": PROPOSED_DEV_END.isoformat(), "trading_days": 318},
+            "SELECTION": {"start": PROPOSED_SELECTION_START.isoformat(),
+                          "end": PROPOSED_SELECTION_END.isoformat(),
+                          "trading_days": 100},
+            "HOLDOUT": {"start": PROPOSED_HOLDOUT_START.isoformat(),
+                        "end": PROPOSED_HOLDOUT_END.isoformat(),
+                        "tentative": True, "trading_days": 98},
+            "FORWARD": {"start": "2026-08-17", "note": "synthetic"},
+        },
+        "mbo_sessions_per_partition": {"DEV": 23, "SELECTION": 23,
+                                       "HOLDOUT": 31},
+        "mbo_blocks_per_partition": per_partition,
+        "checks": [{"check": c, "status": "PASS", "detail": "synthetic"}
+                   for c in MANDATORY_PROPOSAL_CHECKS],
+        "status": "PASS",
+    }
+    p = close / "partition_proposal.json"
+    p.write_text(json.dumps(doc, indent=2))
+    return p
+
+
+def full_corpus_tree(tmp_path):
+    """Build a COMPLETE synthetic repo + data root whose evidence satisfies
+    every frozen activation invariant under the PA-0002 quarantine
+    disposition. Returns ``(repo_root, data_root)``."""
+    import shutil
+
+    from nqresearch.calendar import clear_calendar_cache
+    from nqresearch.calendar_evidence import (
+        CALENDAR_EVIDENCE_PENDING_STATE,
+        CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED,
+        STATE_PENDING,
+    )
+    from nqresearch.config import _repo_root
+    from nqresearch.eligibility import POLICY_STATE_APPROVED
+    from nqresearch.holdout import EXPECTED_BASELINE_GROUPS
+
+    root = tmp_path / "synthrepo"
+    (root / "config" / "data").mkdir(parents=True)
+    (root / "docs").mkdir()
+    (root / "pyproject.toml").write_text("[project]\nname='x'\n")
+    shutil.copy(_repo_root() / "config" / "data" / "cme_calendar.yaml",
+                root / "config" / "data" / "cme_calendar.yaml")
+    data_root = tmp_path / "dataroot"
+
+    matrix_doc, _ = synthetic_matrix_doc(
+        data_root / "reference" / "cme_calendar",
+        date_states={d: STATE_PENDING for d in QUARANTINED_DATES},
+        session_present={d: False for d in UNOBSERVED_QUARANTINED_DATES},
+    )
+    _full_corpus_coverage(data_root, matrix_doc)
+    _, per_partition = _full_corpus_blocks(data_root)
+    _full_corpus_front_series(data_root)
+    _full_corpus_proposal(data_root, per_partition,
+                          CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED)
+
+    matrix_sha = write_matrix(root, matrix_doc)
+    write_eligibility_policy(
+        root, matrix_sha,
+        doc=eligibility_policy_doc(matrix_sha, QUARANTINED_DATES,
+                                   status=POLICY_STATE_APPROVED))
+    (root / "config" / "data" / "cme_calendar_overrides.yaml").write_text(
+        yaml.safe_dump({
+            "meta": {"baseline_verification": {
+                # Truthful: document verification really is still pending;
+                # quarantine never relabels the calendar as verified.
+                "status": CALENDAR_EVIDENCE_PENDING_STATE,
+                "groups": overrides_groups_for(matrix_doc,
+                                               EXPECTED_BASELINE_GROUPS)}},
+            "early_close_overrides": {"2025-01-09": "08:30"},
+        }, sort_keys=False))
+    (root / "docs" / "implementation-audit-log.md").write_text(
+        "# Implementation audit log\n", encoding="utf-8")
+    clear_calendar_cache()
+    return root, data_root

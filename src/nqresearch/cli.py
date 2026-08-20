@@ -12,7 +12,8 @@ from nqresearch.qa.report import write_artifact
 
 AUDIT_PARTS = ["storage", "manifests", "mbp1", "trades", "mbo", "mbo-deep",
                "reconcile", "mbp1-acquisition", "mbp1-overlap-records",
-               "mbp1-coverage", "closeout-finalize", "all"]
+               "mbp1-coverage", "closeout-finalize",
+               "finalize-activation-candidate", "all"]
 # NOTE: "all" covers the Milestone 0 parts; "mbp1-acquisition" is explicit-only
 # so acquisition artifacts under qa/mbp1_full_history/ are regenerated
 # deliberately, never as a side effect.
@@ -206,6 +207,31 @@ def _run_audit(part: str, chunk_rows: int) -> int:
         p = write_artifact(prop, out_dir, "partition_proposal", paths.ROOT)
         statuses["partition-proposal"] = prop["status"]
         print(f"[closeout] partition-proposal: {prop['status']} -> {p}", flush=True)
+
+    if part == "finalize-activation-candidate":
+        # FAIL-CLOSED: refuses unless the research-eligibility policy is
+        # exactly APPROVED_FOR_ACTIVATION. Produces a structurally-ready
+        # CANDIDATE only — it never activates anything, and activation still
+        # requires a separate human-approval audit entry plus
+        # config/data/partitions_active.yaml.
+        from nqresearch.activation import (
+            ActivationError,
+            finalize_activation_candidate,
+        )
+
+        out_dir = paths.qa() / "m0_closeout"
+        try:
+            candidate = finalize_activation_candidate()
+        except ActivationError as e:
+            print(f"[activation] REFUSED: {e}", flush=True)
+            return 1
+        p = write_artifact(candidate, out_dir,
+                           "partition_activation_candidate", paths.ROOT)
+        statuses["activation-candidate"] = candidate["status"]
+        print(f"[activation] candidate: {candidate['state']} "
+              f"(structural_ready={candidate['structural_ready']}, "
+              f"activation_ready={candidate['activation_ready']}) -> {p}",
+              flush=True)
 
     overall = st.worst(statuses.values()) if statuses else st.FAIL
     print(f"[m0] overall: {overall} ({statuses})", flush=True)

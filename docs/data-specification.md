@@ -656,7 +656,17 @@ Current state reference: §6a/§6b/§6c and audit-log AL-0028/AL-0039.
 2. **Partition activation** — the proposal is structurally valid (all gates
    PASS) but PROPOSED_NOT_ACTIVE with activation_ready=false; requires
    document verification (item 1) plus explicit human approval. The holdout
-   boundary 2026-04-01 remains TENTATIVE until that approval.
+   boundary 2026-04-01 remains TENTATIVE until that approval. **The
+   activation mechanism itself is specified by
+   [PA-0003](protocol-amendments/PA-0003-activation-binding-and-publication.md)**
+   (authoritative): the approved artifact is a SEPARATE
+   `partition_activation_candidate.json` while `partition_proposal.json`
+   stays neutral; nine SHA-256 identities are bound; the approval entry is
+   machine-readable (`- decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE` plus
+   all nine hashes, the exact ranges, approver and UTC instant, disposition
+   and calendar state); `activated` is a strict boolean; `approved_at_utc`
+   must be a zero-offset aware datetime; and `partitions_active.yaml` is
+   published create-once and can never overwrite an existing activation.
 3. **Crossed-book states** — presumed halt/auction/pre-open indicative states;
    classification needs session-phase logic and possibly the vendor `status`
    schema for halt windows (notably 2026-08-10 11:31:58 CT). Milestone 2.

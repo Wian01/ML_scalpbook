@@ -183,6 +183,21 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   **No MBO block is quarantined** (77/30 unchanged), coverage stays 516,
   the 8 causal roll switches are unchanged, and **partitions remain
   inactive**.
+- **Activation mechanism specified 2026-08-20 (PA-0003,
+  `docs/protocol-amendments/PA-0003-activation-binding-and-publication.md`
+  — authoritative; supplements, never weakens PA-0001/PA-0002):** the
+  artifact a human approves is a SEPARATE
+  `partition_activation_candidate.json`, while `partition_proposal.json`
+  always stays `PROPOSED_NOT_ACTIVE` and is never relabelled; activation
+  binds **nine** SHA-256 identities (that candidate plus proposal, effective
+  calendar, evidence matrix, GCC correspondence, research-eligibility policy,
+  coverage, MBO blocks, front series); the approval audit entry must carry
+  each required value exactly once as `- key: value`, including
+  `- decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE`; `activated` is a strict
+  boolean; `approved_at_utc` must be a zero-offset aware datetime (never
+  relabelled `Z`); and `config/data/partitions_active.yaml` is published
+  create-once and can never overwrite an existing activation. **PA-0003 is
+  not activation approval and approves no policy.**
 - No features, labels, sampling, models, experiments, activated holdout
   partition, protected holdout dataset, or holdout opening exists yet; only
   the unactivated tentative HOLDOUT proposal exists (data-spec §6a).

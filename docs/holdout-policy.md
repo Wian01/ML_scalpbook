@@ -38,11 +38,33 @@ matrix and GCC correspondence; and an append-only audit-log entry recording
 explicit human approval of those exact hashes (all enforced fail-closed by
 `nqresearch/holdout.py`).
 
+**The activation mechanism is now stricter than the sentence above — see
+[PA-0003](protocol-amendments/PA-0003-activation-binding-and-publication.md)
+(authoritative).** In summary: the artifact a human approves is a SEPARATE
+`partition_activation_candidate.json`, and the neutral
+`partition_proposal.json` always stays `PROPOSED_NOT_ACTIVE` and is never
+relabelled; **nine** SHA-256 identities are bound (that candidate plus the
+eight dependencies — proposal, effective calendar, evidence matrix, GCC
+correspondence, research-eligibility policy, coverage, MBO blocks, front
+series); the approval entry must carry each required value exactly once as a
+machine-readable `- key: value`, including
+`- decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE`; `activated` is a strict
+boolean (`1`/`"true"`/`"yes"` never activate); `approved_at_utc` must be a
+timezone-aware **whole-second** datetime with exactly zero offset — a
+non-UTC value is refused rather than relabelled `Z`, and a
+microsecond-bearing value is refused rather than truncated, since the
+approval format records whole seconds only; and
+`config/data/partitions_active.yaml` is published with an atomic
+create-if-absent operation that can never overwrite an existing activation.
+PA-0003 changes no evidence state and is not activation approval.
+
 Under the proposed **PA-0002 research-eligibility quarantine** (data-spec
 §6d) the ten `PENDING_EVIDENCE` dates are dispositioned — not verified —
 by a committed policy (`config/data/research_eligibility.yaml`), whose
 SHA-256 becomes a further mandatory activation binding alongside the
-proposal, effective-calendar, evidence-matrix and GCC-correspondence hashes.
+proposal, effective-calendar, evidence-matrix and GCC-correspondence hashes
+(and, per PA-0003, the activation-candidate, coverage, MBO-blocks and
+front-series hashes — nine in total).
 All ten lie inside DEV; **none is in SELECTION or HOLDOUT and none is a
 partition boundary**, so HOLDOUT is entirely unaffected and remains sealed.
 `CONFLICT_REQUIRES_REVIEW` can never be dispositioned by quarantine, the

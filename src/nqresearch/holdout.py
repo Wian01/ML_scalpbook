@@ -22,14 +22,54 @@ Rules enforced here:
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from pathlib import Path
+from typing import Literal
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 ACTIVE_PARTITIONS_FILENAME = "partitions_active.yaml"
 _SHA256_HEX = set("0123456789abcdef")
+
+# The ONLY partition-proposal state that may take part in activation. A
+# generated artifact asserts mechanical/structural readiness and nothing
+# more: it can never self-certify human approval of its own bytes, since its
+# SHA-256 does not exist until after it is written. Human approval lives in
+# the append-only audit log; actual activation lives in
+# config/data/partitions_active.yaml.
+CANDIDATE_STATE_READY = "READY_FOR_ACTIVATION_APPROVAL"
+CANDIDATE_STATE_NOT_ACTIVE = "PROPOSED_NOT_ACTIVE"
+
+# The canonical activation-candidate artifact. It is a SEPARATE artifact from
+# the neutral partition_proposal.json, which always remains
+# PROPOSED_NOT_ACTIVE and is never overwritten or relabelled.
+CANDIDATE_ARTIFACT_FILENAME = "partition_activation_candidate.json"
+CANDIDATE_ARTIFACT_TYPE = "partition_activation_candidate"
+
+# The one machine-readable decision value that authorises activation. A loose
+# "APPROVE" substring is NEVER sufficient (it also matches "DO NOT APPROVE",
+# "NOT APPROVED", "APPROVAL REFUSED").
+APPROVAL_DECISION_VALUE = "APPROVE_PA_0002_ACTIVATION_CANDIDATE"
+
+# The eight underlying dependency identities, plus the candidate itself.
+UNDERLYING_IDENTITY_FIELDS = (
+    "partition_proposal_sha256",
+    "effective_calendar_sha256",
+    "evidence_matrix_sha256",
+    "cme_correspondence_sha256",
+    "research_eligibility_sha256",
+    "coverage_artifact_sha256",
+    "mbo_blocks_sha256",
+    "front_contract_series_sha256",
+)
 
 
 class HoldoutFenceError(RuntimeError):
@@ -93,9 +133,15 @@ class ActivePartitions(BaseModel):
     (PA-0001).
     """
 
-    activated: bool
+    # STRICT: `1`, `"true"`, `"yes"`, `1.0` and every other truthy value are
+    # REFUSED. Only the literal YAML/Python boolean true may ever activate
+    # research access.
+    activated: StrictBool
     approval: ApprovalRecord
-    partition_proposal_sha256: str  # SHA-256 of the approved proposal artifact
+    # The APPROVED activation candidate itself (never disguised as the
+    # neutral proposal SHA), plus its eight underlying dependencies.
+    activation_candidate_sha256: str
+    partition_proposal_sha256: str  # neutral PROPOSED_NOT_ACTIVE source
     effective_calendar_sha256: str  # merged-calendar identity at approval time
     evidence_matrix_sha256: str     # committed cme_calendar_evidence.yaml file
     cme_correspondence_sha256: str  # immutable GCC archive-unavailability .eml
@@ -111,7 +157,8 @@ class ActivePartitions(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    @field_validator("partition_proposal_sha256", "effective_calendar_sha256",
+    @field_validator("activation_candidate_sha256",
+                     "partition_proposal_sha256", "effective_calendar_sha256",
                      "evidence_matrix_sha256", "cme_correspondence_sha256",
                      "research_eligibility_sha256", "coverage_artifact_sha256",
                      "mbo_blocks_sha256", "front_contract_series_sha256")
@@ -126,8 +173,156 @@ class ActivePartitions(BaseModel):
         if not (self.dev.end < self.selection.start <= self.selection.end
                 < self.holdout.start):
             raise ValueError("partitions must be chronological: DEV < SELECTION < HOLDOUT")
-        if not self.activated:
-            raise ValueError("partitions file present but activated is not true")
+        if self.activated is not True:
+            raise ValueError(
+                "partitions file present but activated is not exactly "
+                "boolean true"
+            )
+        return self
+
+
+class _CandidateRange(BaseModel):
+    start: date
+    end: date
+    trading_days: StrictInt
+    tentative: StrictBool = False
+
+    model_config = {"extra": "forbid"}
+
+
+class _CandidateForward(BaseModel):
+    """FORWARD is a start-only descriptor: it has no end, because everything
+    after the boundary is forward data. Its exact fields are modelled so an
+    invented key cannot ride along inside it."""
+
+    start: date
+    note: str
+
+    model_config = {"extra": "forbid"}
+
+
+class _CandidateProposal(BaseModel):
+    DEV: _CandidateRange
+    SELECTION: _CandidateRange
+    HOLDOUT: _CandidateRange
+    FORWARD: _CandidateForward
+
+    model_config = {"extra": "forbid"}
+
+
+class _CandidateCheck(BaseModel):
+    """Exactly the three fields `qa.status.check()` produces for the frozen
+    structural checks. `extra="forbid"`: an invented field inside a check is
+    refused rather than silently carried."""
+
+    check: str
+    status: Literal["PASS"]
+    detail: str
+
+    model_config = {"extra": "forbid"}
+
+
+class _CandidateIdentities(BaseModel):
+    """The eight dependency identities the candidate binds. `extra=forbid`
+    plus required fields means the set is EXACT: neither a missing nor an
+    invented identity can pass."""
+
+    partition_proposal_sha256: str
+    effective_calendar_sha256: str
+    evidence_matrix_sha256: str
+    cme_correspondence_sha256: str
+    research_eligibility_sha256: str
+    coverage_artifact_sha256: str
+    mbo_blocks_sha256: str
+    front_contract_series_sha256: str
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("*")
+    @classmethod
+    def _sha256(cls, v: str) -> str:
+        if not _is_sha256_hex(v):
+            raise ValueError("must be a 64-hex-char SHA-256 identity")
+        return v.lower()
+
+
+class ActivationCandidate(BaseModel):
+    """STRICT schema of ``partition_activation_candidate.json``.
+
+    EVERY declared model here — this one and ``_CandidateProposal``,
+    ``_CandidateRange``, ``_CandidateForward``, ``_CandidateCheck`` and
+    ``_CandidateIdentities`` — sets ``extra="forbid"``, so an unexpected field
+    at any of those levels is refused rather than partially trusted.
+
+    Three fields remain free-form mappings by design, because their shape is
+    derived rather than fixed: ``structural_quarantine``,
+    ``mbo_sessions_per_partition`` and ``mbo_blocks_per_partition``. They are
+    NOT trusted on the strength of the schema — ``_verify_activation_evidence``
+    accepts them only by EXACT equality against evidence recomputed at
+    verification time, so an invented key inside one of them changes the
+    mapping and is refused there.
+    """
+
+    # Provenance envelope — owned exclusively by qa/report.py.
+    generated_at_utc: str
+    nqresearch_version: str
+    git_sha: str
+    generation_git_clean: StrictBool
+    restamp_note: str
+    audit_code_hash: str
+    config_hash: str
+    data_root: str
+    # Substance.
+    artifact: Literal["partition_activation_candidate"]
+    state: Literal["READY_FOR_ACTIVATION_APPROVAL"]
+    structural_ready: StrictBool
+    activation_ready: StrictBool
+    calendar_verification_state: str
+    evidence_disposition: str
+    research_eligibility_policy_state: str
+    quarantined_dates: list[str]
+    n_quarantined_calendar_dates: StrictInt
+    structural_quarantine: dict
+    bound_identities: _CandidateIdentities
+    proposal: _CandidateProposal
+    mbo_sessions_per_partition: dict
+    mbo_blocks_per_partition: dict
+    checks: list[_CandidateCheck]
+    activation_requires: list[str]
+    status: Literal["PASS"]
+
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def _internally_coherent(self):
+        if self.structural_ready is not True:
+            raise ValueError("structural_ready must be boolean true")
+        if self.activation_ready is not False:
+            raise ValueError(
+                "activation_ready must be boolean false: a generated "
+                "candidate can never self-certify activation"
+            )
+        dates = self.quarantined_dates
+        if self.n_quarantined_calendar_dates != len(dates):
+            raise ValueError(
+                "n_quarantined_calendar_dates does not equal the number of "
+                "quarantined_dates"
+            )
+        if len(set(dates)) != len(dates) or list(dates) != sorted(dates):
+            raise ValueError(
+                "quarantined_dates must be unique and in ascending order"
+            )
+        for iso in dates:
+            try:
+                date.fromisoformat(iso)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"quarantined date {iso!r} is not an ISO date"
+                ) from e
+        if not self.activation_requires:
+            raise ValueError(
+                "a candidate must state what activation still requires"
+            )
         return self
 
 
@@ -365,7 +560,7 @@ def _verify_calendar_evidence(
     parts: "ActivePartitions", repo_root: Path, data_root: Path,
     proposal_cal_state: str | None = None,
     proposal_doc: dict | None = None,
-) -> None:
+) -> tuple:
     """Date-level calendar evidence gate (PA-0001, supersedes the group-level
     DOCUMENT_VERIFIED-only gate after CME GCC confirmed the historical
     archive does not exist).
@@ -382,6 +577,11 @@ def _verify_calendar_evidence(
       (conservative weakest-member roll-ups over the frozen nine groups) and
       declare the completed policy state;
     - the Jan-9 mourning reference carries the real PDF hash.
+
+    Returns ``(disposition, policy, structural_quarantine_facts_or_None)`` so
+    the caller can compare an activation candidate's recorded substance
+    against these freshly recomputed facts rather than trusting the
+    candidate's own copy of them.
     """
     from nqresearch import calendar_evidence as ce
 
@@ -415,12 +615,14 @@ def _verify_calendar_evidence(
     # BEFORE any of their content is trusted.
     _verify_structural_artifacts(parts, matrix, data_root, repo_root,
                                  proposal_doc or {})
+    quarantine_facts = None
     if disposition == ce.DISPOSITION_PENDING_DATES_QUARANTINED:
         # Quarantined dates must be structurally incapable of disturbing
         # partitions, MBO blocks, or the causal roll series, and the frozen
         # corpus invariants must hold exactly.
         try:
-            el.verify_structural_quarantine_invariants(repo_root, data_root)
+            quarantine_facts = el.verify_structural_quarantine_invariants(
+                repo_root, data_root)
         except el.EligibilityPolicyError as e:
             raise PartitionsNotActiveError(str(e)) from e
     # The proposal artifact must declare exactly the state implied by the
@@ -528,24 +730,31 @@ def _verify_calendar_evidence(
                     "override Jan-9 mourning reference hash does not match "
                     "the verified official PDF evidence; failing closed"
                 )
+    return disposition, policy, quarantine_facts
 
 
 def _verify_approval_bound_to_audit_record(
     parts: "ActivePartitions", repo_root: Path
 ) -> None:
-    """The claimed immutable human approval must be REAL: the committed
-    approval_reference must name an entry in the append-only implementation
-    audit log, and that entry must cite the exact approved proposal SHA, the
-    exact calendar-evidence matrix SHA, and the exact CME archive-
-    unavailability correspondence SHA (PA-0001)."""
-    import re
+    """The claimed immutable human approval must be REAL and COMPLETE.
 
-    m = re.search(r"AL-\d{3,4}", parts.approval.approval_reference)
-    if not m:
+    `approval_reference` must resolve to EXACTLY ONE `## AL-nnnn` heading in
+    the append-only audit log (exact four-digit form; a prefix such as
+    AL-0055 must never match AL-00550, and duplicate headings are refused),
+    and that entry must carry the machine-readable approval fields: the exact
+    decision value, the candidate identity plus all EIGHT dependency
+    identities, the exact partition ranges, the approving identity and UTC
+    timestamp, and the quarantine disposition and calendar state. Every field
+    must appear exactly once as ``- key: value`` and match exactly; prose is
+    never sufficient and never sufficient to infer approval from.
+    """
+    ref = parts.approval.approval_reference
+    if not re.fullmatch(r"AL-\d{4}", ref):
         raise PartitionsNotActiveError(
-            "approval_reference does not name an audit-log entry (AL-nnnn); "
-            "failing closed"
+            f"approval_reference {ref!r} is not EXACTLY the supported form "
+            "AL-nnnn (four digits, nothing else); failing closed"
         )
+    entry_id = ref
     log_path = repo_root / "docs" / "implementation-audit-log.md"
     if not log_path.is_file():
         raise PartitionsNotActiveError(
@@ -553,133 +762,346 @@ def _verify_approval_bound_to_audit_record(
             "failing closed"
         )
     text = log_path.read_text(encoding="utf-8")
-    heading = f"## {m.group(0)}"
-    idx = text.find(heading)
-    if idx < 0:
+    # Exact heading match, anchored at line start, requiring a real boundary
+    # so neither AL-00550 nor AL-0055x can ever match AL-0055.
+    pattern = re.compile(rf"^## {re.escape(entry_id)}(?![0-9A-Za-z_-])", re.M)
+    starts = [mm.start() for mm in pattern.finditer(text)]
+    if not starts:
         raise PartitionsNotActiveError(
-            f"approval reference {m.group(0)} has no entry in the append-only "
+            f"approval reference {entry_id} has no entry in the append-only "
             "audit log; failing closed"
         )
-    nxt = text.find("\n## ", idx + len(heading))
+    if len(starts) > 1:
+        raise PartitionsNotActiveError(
+            f"approval reference {entry_id} is ambiguous: {len(starts)} "
+            "matching audit-log headings; failing closed"
+        )
+    idx = starts[0]
+    nxt = text.find("\n## ", idx + 4)
     entry = text[idx: nxt if nxt > 0 else len(text)]
+
+    # STRICT machine-readable fields: every required key must appear EXACTLY
+    # ONCE as "- key: value". Duplicate keys, conflicting values, missing keys
+    # and unrelated free-text occurrences elsewhere are all refused, so
+    # approval can never be inferred from prose.
+    from nqresearch.calendar_evidence import (
+        CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED,
+        DISPOSITION_PENDING_DATES_QUARANTINED,
+    )
+
+    seen: dict[str, str] = {}
+    duplicated: set[str] = set()
+    for line in entry.splitlines():
+        mm = re.match(r"^\s*-\s*([A-Za-z0-9_]+)\s*:\s*(\S.*?)\s*$", line)
+        if not mm:
+            continue
+        key, value = mm.group(1), mm.group(2)
+        # ANY repetition is ambiguous — identical repeats included, because a
+        # reader cannot tell which line a later edit was meant to change.
+        if key in seen:
+            duplicated.add(key)
+        seen[key] = value
+
+    def _span(rng) -> str:
+        return f"{rng.start.isoformat()}..{rng.end.isoformat()}"
+
     required = {
-        "proposal SHA-256": parts.partition_proposal_sha256,
-        "evidence matrix SHA-256": parts.evidence_matrix_sha256,
-        "CME correspondence SHA-256": parts.cme_correspondence_sha256,
-        "research-eligibility policy SHA-256":
-            parts.research_eligibility_sha256,
-        "coverage artifact SHA-256": parts.coverage_artifact_sha256,
-        "MBO blocks SHA-256": parts.mbo_blocks_sha256,
-        "front-contract series SHA-256": parts.front_contract_series_sha256,
+        "decision": APPROVAL_DECISION_VALUE,
+        "activation_candidate_sha256": parts.activation_candidate_sha256,
+        "partition_proposal_sha256": parts.partition_proposal_sha256,
+        "effective_calendar_sha256": parts.effective_calendar_sha256,
+        "evidence_matrix_sha256": parts.evidence_matrix_sha256,
+        "cme_correspondence_sha256": parts.cme_correspondence_sha256,
+        "research_eligibility_sha256": parts.research_eligibility_sha256,
+        "coverage_artifact_sha256": parts.coverage_artifact_sha256,
+        "mbo_blocks_sha256": parts.mbo_blocks_sha256,
+        "front_contract_series_sha256": parts.front_contract_series_sha256,
+        "dev_range": _span(parts.dev),
+        "selection_range": _span(parts.selection),
+        "holdout_range": _span(parts.holdout),
+        "approved_by": parts.approval.approved_by,
+        "approved_at_utc":
+            parts.approval.approved_at_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "quarantine_disposition": DISPOSITION_PENDING_DATES_QUARANTINED,
+        "calendar_state": CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED,
     }
-    for what, sha in required.items():
-        if sha not in entry:
+    dupes = duplicated & set(required)
+    if dupes:
+        raise PartitionsNotActiveError(
+            f"audit-log entry {entry_id} declares duplicate approval fields "
+            f"{sorted(dupes)}; failing closed"
+        )
+    for key, expected in required.items():
+        if key not in seen:
             raise PartitionsNotActiveError(
-                f"audit-log entry {m.group(0)} does not cite the {what}; "
-                "approval is not bound to this activation's exact evidence; "
-                "failing closed"
+                f"audit-log entry {entry_id} is missing the machine-readable "
+                f"approval field '- {key}: …'; failing closed"
+            )
+        if seen[key] != expected:
+            raise PartitionsNotActiveError(
+                f"audit-log entry {entry_id} field {key!r} is "
+                f"{seen[key]!r}, expected {expected!r}; approval is not bound "
+                "to this exact activation; failing closed"
             )
 
 
-def _verify_activation_evidence(
-    parts: ActivePartitions, repo_root: Path, data_root: Path
-) -> None:
-    """Verify the activation binds to ACTUAL evidence, not just well-formed
-    hashes: the approved proposal artifact's real SHA-256, exact range
-    equality with the proposal, the proposal's structural checks PASS, and
-    the CURRENT effective calendar identity. Fabricated 64-hex values fail
-    here."""
+MANDATORY_PROPOSAL_CHECKS = frozenset({
+    "boundaries_on_trading_days",
+    "partition_ranges_contiguous",
+    "no_partition_spanning_mbo_blocks",
+})
+
+
+def _load_bound_artifact(path: Path, declared: str, artifact_type: str,
+                         what: str) -> dict:
+    """Read an activation-bound artifact, prove its EXACT bytes against the
+    identity the active configuration declares, prove its declared type, and
+    prove its provenance envelope — in that order, before any of its content
+    is trusted."""
     import hashlib
     import json
 
-    proposal_path = data_root / "qa" / "m0_closeout" / "partition_proposal.json"
-    if not proposal_path.is_file():
+    if not path.is_file():
         raise PartitionsNotActiveError(
-            "activation evidence missing: approved partition_proposal.json "
-            "not found; failing closed"
+            f"activation evidence missing: {what} ({path.name}) not found; "
+            "failing closed"
         )
-    actual_sha = hashlib.sha256(proposal_path.read_bytes()).hexdigest()
-    if actual_sha != parts.partition_proposal_sha256:
+    raw = path.read_bytes()
+    actual = hashlib.sha256(raw).hexdigest()
+    if actual != declared:
         raise PartitionsNotActiveError(
-            "activation does not bind to the actual approved proposal "
-            f"artifact (declared {parts.partition_proposal_sha256[:12]}…, "
-            f"actual {actual_sha[:12]}…); failing closed"
+            f"activation does not bind to the actual {what} artifact "
+            f"(declared {declared[:12]}…, actual {actual[:12]}…); "
+            "failing closed"
         )
-    doc = json.loads(proposal_path.read_text(encoding="utf-8"))
-    if doc.get("artifact") != "partition_proposal":
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except Exception as e:
         raise PartitionsNotActiveError(
-            "bound artifact is not a partition proposal; failing closed"
+            f"{what} artifact {path.name} is malformed: {e}; failing closed"
+        ) from e
+    if doc.get("artifact") != artifact_type:
+        raise PartitionsNotActiveError(
+            f"bound artifact is not a {artifact_type} (declares "
+            f"{doc.get('artifact')!r}); failing closed"
         )
-    # The proposal itself must carry a trustworthy CURRENT envelope BEFORE
-    # any of its status, checks, state, readiness, ranges or embedded
-    # identities are trusted.
-    _verify_artifact_envelope("partition_proposal.json", doc)
+    _verify_artifact_envelope(path.name, doc)
+    return doc
+
+
+def _verify_neutral_proposal(doc: dict) -> dict:
+    """The neutral ``partition_proposal.json`` is an INDEPENDENT artifact from
+    the activation candidate. It always remains PROPOSED_NOT_ACTIVE and is
+    never overwritten or relabelled: relabelling it would let a single
+    generated artifact stand in for both the mechanical source and the
+    approved candidate."""
     if doc.get("status") != "PASS":
         raise PartitionsNotActiveError(
             f"proposal top-level status is {doc.get('status')!r}, not PASS; "
             "failing closed"
         )
-    MANDATORY_CHECKS = {
-        "boundaries_on_trading_days",
-        "partition_ranges_contiguous",
-        "no_partition_spanning_mbo_blocks",
-    }
     checks = {c.get("check"): c.get("status") for c in doc.get("checks", [])}
-    if set(checks) != MANDATORY_CHECKS:
+    if set(checks) != set(MANDATORY_PROPOSAL_CHECKS):
         raise PartitionsNotActiveError(
             f"proposal structural-check set {sorted(checks)} does not exactly "
-            f"match the mandatory set {sorted(MANDATORY_CHECKS)}; failing closed"
+            f"match the mandatory set {sorted(MANDATORY_PROPOSAL_CHECKS)}; "
+            "failing closed"
         )
     if any(status != "PASS" for status in checks.values()):
         raise PartitionsNotActiveError(
             f"approved proposal's structural checks are not all PASS "
             f"({checks}); failing closed"
         )
-    # Internal coherence: state, activation_ready, and calendar verification
-    # must AGREE on the single activation-approved combination; any
-    # contradictory mixture fails closed.
     state = doc.get("state")
+    if state != CANDIDATE_STATE_NOT_ACTIVE:
+        raise PartitionsNotActiveError(
+            f"the neutral partition proposal declares state {state!r}, not "
+            f"{CANDIDATE_STATE_NOT_ACTIVE}: the proposal must remain "
+            "independently identifiable and neutral; the activation candidate "
+            f"is a separate artifact ({CANDIDATE_ARTIFACT_FILENAME}); "
+            "failing closed"
+        )
     ready = doc.get("activation_ready")
-    cal_state = doc.get("calendar_verification_state")
-    if state != "APPROVED_FOR_ACTIVATION":
+    if ready is not False or not isinstance(ready, bool):
         raise PartitionsNotActiveError(
-            f"proposal state is {state!r}, not APPROVED_FOR_ACTIVATION "
-            "(a PROPOSED_NOT_ACTIVE artifact can never activate, regardless "
-            "of other flags); failing closed"
+            f"the neutral partition proposal declares activation_ready="
+            f"{ready!r}: a generated artifact must NEVER self-certify "
+            "activation readiness; failing closed"
         )
-    if ready is not True:
+    return checks
+
+
+def _verify_activation_candidate(doc: dict) -> ActivationCandidate:
+    """SEPARATION OF POWERS. A generated artifact may only assert MECHANICAL
+    readiness; it can never self-certify that a human approved its exact
+    bytes, because its own SHA does not exist while it is being written.
+    Activation therefore requires THREE independent records:
+      1. this structurally-ready candidate;
+      2. a separately committed human-approval audit entry binding its exact
+         SHA and every dependency (_verify_approval_bound_to_audit_record);
+      3. the active configuration itself (partitions_active.yaml).
+
+    The bespoke state checks run FIRST so their fail-closed reasons stay
+    legible, then the STRICT schema validates the candidate's COMPLETE
+    substance (unknown, missing or malformed fields are all refused).
+    """
+    state = doc.get("state")
+    structural_ready = doc.get("structural_ready")
+    ready = doc.get("activation_ready")
+    if state != CANDIDATE_STATE_READY:
         raise PartitionsNotActiveError(
-            "proposal activation_ready is not true (contradicts the approved "
-            "state); failing closed"
+            f"activation candidate state is {state!r}, not "
+            f"{CANDIDATE_STATE_READY} (a PROPOSED_NOT_ACTIVE artifact can "
+            "never activate, and no artifact may declare itself approved); "
+            "failing closed"
         )
+    if structural_ready is not True or not isinstance(structural_ready, bool):
+        raise PartitionsNotActiveError(
+            f"candidate structural_ready is {structural_ready!r}, not boolean "
+            "true; failing closed"
+        )
+    if ready is not False or not isinstance(ready, bool):
+        raise PartitionsNotActiveError(
+            f"candidate activation_ready is {ready!r}: a generated candidate "
+            "must NEVER self-certify activation readiness — activation is "
+            "conferred only by the human-approval audit entry plus this "
+            "active configuration; failing closed"
+        )
+    try:
+        return ActivationCandidate(**doc)
+    except Exception as e:
+        raise PartitionsNotActiveError(
+            f"activation candidate substance is not valid: {e}; failing closed"
+        ) from e
+
+
+def _verify_activation_evidence(
+    parts: ActivePartitions, repo_root: Path, data_root: Path
+) -> None:
+    """Verify the activation binds to ACTUAL evidence, not merely well-formed
+    hashes.
+
+    NINE identities are bound: the exact activation CANDIDATE
+    (``partition_activation_candidate.json``) plus its eight underlying
+    dependencies. The candidate is the artifact a human approved; the neutral
+    ``partition_proposal.json`` is verified SEPARATELY and must still be
+    PROPOSED_NOT_ACTIVE. The candidate's complete substance is then compared
+    against evidence recomputed here, never trusted from its own copy.
+    Fabricated 64-hex values fail here.
+    """
+    close = data_root / "qa" / "m0_closeout"
+
+    # 1. The neutral source proposal — independent identity, still neutral.
+    proposal_doc = _load_bound_artifact(
+        close / "partition_proposal.json", parts.partition_proposal_sha256,
+        "partition_proposal", "approved proposal")
+    proposal_checks = _verify_neutral_proposal(proposal_doc)
+
+    # 2. The activation candidate — the artifact human approval names.
+    candidate_doc = _load_bound_artifact(
+        close / CANDIDATE_ARTIFACT_FILENAME, parts.activation_candidate_sha256,
+        CANDIDATE_ARTIFACT_TYPE, "activation candidate")
+    candidate = _verify_activation_candidate(candidate_doc)
+
     from nqresearch.calendar_evidence import (
         CALENDAR_EVIDENCE_COMPLETE_STATE,
         CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED,
+        DISPOSITION_PENDING_DATES_QUARANTINED,
     )
+    cal_state = candidate.calendar_verification_state
     if cal_state not in ("DOCUMENT_VERIFIED", CALENDAR_EVIDENCE_COMPLETE_STATE,
                          CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED):
         raise PartitionsNotActiveError(
-            "proposal calendar_verification_state is "
+            "candidate calendar_verification_state is "
             f"{cal_state!r}, not DOCUMENT_VERIFIED, "
             f"{CALENDAR_EVIDENCE_COMPLETE_STATE} or "
             f"{CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED} (contradicts the "
             "approved state); failing closed"
         )
-    _verify_calendar_evidence(parts, repo_root, data_root, cal_state, doc)
+
+    # 3. Recompute the calendar/quarantine evidence independently.
+    disposition, policy, quarantine_facts = _verify_calendar_evidence(
+        parts, repo_root, data_root, cal_state, proposal_doc)
+
+    # 4. Human approval, bound to the candidate identity and all eight
+    #    dependencies.
     _verify_approval_bound_to_audit_record(parts, repo_root)
-    prop = doc.get("proposal", {})
-    expected = {
-        "dev": parts.dev, "selection": parts.selection, "holdout": parts.holdout,
-    }
-    for name, rng in expected.items():
-        p = prop.get(name.upper(), {})
-        if (p.get("start") != rng.start.isoformat()
-                or p.get("end") != rng.end.isoformat()):
+
+    # 5. The candidate's eight bound identities must equal what this active
+    #    configuration binds — the candidate never introduces a ninth truth.
+    bound = candidate.bound_identities.model_dump()
+    for field in UNDERLYING_IDENTITY_FIELDS:
+        if bound[field] != getattr(parts, field):
             raise PartitionsNotActiveError(
-                f"active {name.upper()} range {rng.start}..{rng.end} does not "
-                f"exactly equal the approved proposal "
-                f"({p.get('start')}..{p.get('end')}); failing closed"
+                f"activation candidate binds {field}="
+                f"{bound[field][:12]}… but the active configuration binds "
+                f"{getattr(parts, field)[:12]}…; failing closed"
             )
+
+    # 6. The candidate's recorded substance versus FRESHLY recomputed facts.
+    if candidate.evidence_disposition != disposition:
+        raise PartitionsNotActiveError(
+            f"activation candidate records evidence disposition "
+            f"{candidate.evidence_disposition!r} but the live evidence "
+            f"resolves to {disposition!r}; failing closed"
+        )
+    if candidate.research_eligibility_policy_state != policy.meta.status:
+        raise PartitionsNotActiveError(
+            "activation candidate records research-eligibility policy state "
+            f"{candidate.research_eligibility_policy_state!r} but the live "
+            f"policy is {policy.meta.status!r}; failing closed"
+        )
+    if candidate.quarantined_dates != sorted(policy.dates):
+        raise PartitionsNotActiveError(
+            "activation candidate's quarantined dates do not equal the live "
+            "research-eligibility policy's quarantined dates; failing closed"
+        )
+    expected_facts = (quarantine_facts if
+                      disposition == DISPOSITION_PENDING_DATES_QUARANTINED
+                      else {})
+    if candidate.structural_quarantine != expected_facts:
+        raise PartitionsNotActiveError(
+            "activation candidate's structural-quarantine facts do not equal "
+            "the facts recomputed from the live artifacts; failing closed"
+        )
+    cand_checks = {c.check: c.status for c in candidate.checks}
+    if cand_checks != proposal_checks:
+        raise PartitionsNotActiveError(
+            "activation candidate's structural checks do not equal the "
+            "neutral proposal's; failing closed"
+        )
+    # EXACT equality of the raw mappings the strict schema cannot fully
+    # constrain (derived shapes) or that carry detail beyond check/status.
+    # An invented key anywhere inside them changes the mapping and is refused.
+    for key in ("checks", "proposal", "mbo_sessions_per_partition",
+                "mbo_blocks_per_partition"):
+        if candidate_doc.get(key) != proposal_doc.get(key):
+            raise PartitionsNotActiveError(
+                f"activation candidate's {key} does not exactly equal the "
+                "neutral proposal's; failing closed"
+            )
+
+    # 7. Exact ranges: the active configuration, the candidate and the neutral
+    #    proposal must all describe the SAME partitions.
+    src_ranges = proposal_doc.get("proposal", {})
+    for name, rng in (("DEV", parts.dev), ("SELECTION", parts.selection),
+                      ("HOLDOUT", parts.holdout)):
+        c = getattr(candidate.proposal, name)
+        if c.start != rng.start or c.end != rng.end:
+            raise PartitionsNotActiveError(
+                f"active {name} range {rng.start}..{rng.end} does not "
+                f"exactly equal the approved candidate "
+                f"({c.start}..{c.end}); failing closed"
+            )
+        s = src_ranges.get(name, {})
+        if (s.get("start") != rng.start.isoformat()
+                or s.get("end") != rng.end.isoformat()):
+            raise PartitionsNotActiveError(
+                f"active {name} range {rng.start}..{rng.end} does not "
+                f"exactly equal the neutral proposal "
+                f"({s.get('start')}..{s.get('end')}); failing closed"
+            )
+
     from nqresearch.calendar import calendar_identity
 
     cal_sha = calendar_identity(repo_root)["effective_calendar_sha256"]
