@@ -3897,3 +3897,65 @@ in by the entry that creates the initial commit.
 - **Commit:** this entry is committed separately as an audit-log-only commit
   immediately after `4f44d91`; neither `2ad4467` nor `4f44d91` is
   amended. Nothing has been pushed.
+
+## AL-0064 — HUMAN APPROVAL of activation candidate `5d9fc036`: DEV/SELECTION activation authorised; HOLDOUT stays sealed
+
+- **Category:** protocol-relevant decision — explicit human approval of an
+  EXACT activation candidate under PA-0003. AL-0055 through AL-0063 and every
+  earlier entry are unchanged. **This entry records an approval; it does not
+  itself activate anything.**
+- **Decision.** The project owner, **Wian**, explicitly approved activation
+  candidate `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32`
+  and its eight bound dependency identities, **for DEV/SELECTION partition
+  activation only**.
+- **HOLDOUT MUST REMAIN SEALED.** The HOLDOUT range is bound here solely so
+  the fence knows which dates to REFUSE. This approval confers **no**
+  permission to read, enumerate, decode, sample or evaluate any HOLDOUT or
+  FORWARD record. Opening HOLDOUT remains the separate explicit workflow of
+  `docs/holdout-policy.md` §4, which requires a committed
+  `docs/holdout_plan_01.md` and is not authorised by this or any prior entry.
+- **What this authorises, and what it does not.** It authorises RECORDING the
+  approval. It does **not** authorise creating
+  `config/data/partitions_active.yaml`, activating partitions, accessing
+  HOLDOUT/FORWARD market records, or beginning normalization — each of which
+  requires its own separate approval.
+- **Pre-approval reverification (read-only).** Immediately before this entry
+  was written, the candidate bytes were re-hashed and every one of the eight
+  dependency identities was recomputed from the live evidence and compared
+  three ways — candidate-recorded vs live vs owner-approved — all equal. The
+  candidate also re-passed the strict `ActivationCandidate` schema with
+  `state=READY_FOR_ACTIVATION_APPROVAL`, `structural_ready=true`,
+  **`activation_ready=false`**, `generation_git_clean=true`, policy state
+  `APPROVED_FOR_ACTIVATION`, calendar state
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`, and the exact ten quarantined
+  dates. No `config/data/partitions_active.yaml` existed.
+
+### Machine-readable approval record (PA-0003 §4)
+
+- decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE
+- activation_candidate_sha256: 5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32
+- partition_proposal_sha256: 24a555d6c45e691fe1838b7d7691059dce7bd6c7d07a55d5623e891a35a906fb
+- effective_calendar_sha256: ca2edfe6c2d05007c35837341ac73de955d8df6fd7821410307bf7fc18a3d010
+- evidence_matrix_sha256: f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250
+- cme_correspondence_sha256: 67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0
+- research_eligibility_sha256: b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f
+- coverage_artifact_sha256: 3230d9c28bb62d814fdf2d6c03054968b932d05f3de509a77dcbf4dc0432ba31
+- mbo_blocks_sha256: 24862c197de32885f30ef976cbf258ab95b4aacaf31d8eb539e298d07d361da9
+- front_contract_series_sha256: d3d618a63c9623696b0a0f9c97b8d077e27bbb4f3cf48b23603f0d53121e960b
+- dev_range: 2024-08-19..2025-11-07
+- selection_range: 2025-11-10..2026-03-31
+- holdout_range: 2026-04-01..2026-08-14
+- approved_by: Wian
+- approved_at_utc: 2026-08-20T05:12:27Z
+- quarantine_disposition: PENDING_DATES_QUARANTINED
+- calendar_state: PROVISIONAL_PENDING_DATES_QUARANTINED
+
+- **Approval instant:** `2026-08-20T05:12:27Z` — an actual current UTC timestamp at
+  whole-second precision, as PA-0003 §6 requires (the format records whole
+  seconds, so a sub-second value would be refused rather than truncated).
+- **Reserved decision line.** This is the FIRST and must remain the ONLY
+  audit-log entry carrying `- decision: …`. Any second occurrence anywhere in
+  this append-only log would make approval ambiguous and is refused by
+  `holdout._verify_approval_bound_to_audit_record`.
+- **Commit:** committed separately as an audit-log-only approval commit; no
+  existing commit is amended. Nothing pushed.
