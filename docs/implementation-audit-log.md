@@ -3959,3 +3959,92 @@ in by the entry that creates the initial commit.
   `holdout._verify_approval_bound_to_audit_record`.
 - **Commit:** committed separately as an audit-log-only approval commit; no
   existing commit is amended. Nothing pushed.
+
+## AL-0065 — Approval-record verification: test-only commit `c323033` pins the ONE real candidate approval; nothing activated
+
+- **Category:** test change with a documented changed requirement (rule 7) +
+  verification record for the AL-0064 approval. **AL-0064 is NOT altered**,
+  nor is any earlier entry, and this entry introduces **no** second
+  candidate-approval decision line.
+
+- **Test-only commit:** `c3230331e3d7d76db0fcb0c3410dd55256311c99`
+  ("Tests: pin the real AL-0064 candidate-approval record"), containing
+  exactly `tests/unit/test_eligibility.py`. No source, configuration,
+  documentation, artifact or data file is touched.
+
+- **WHY the previous assertion legitimately changed.** Until AL-0064 the
+  suite asserted that **no** `- decision:` line existed anywhere in the
+  append-only log — correct while the reserved PA-0003 value was still
+  awaiting a human decision about an exact candidate. The project owner has
+  now made that decision, so the line legitimately EXISTS. The assertion was
+  therefore inverted and **strengthened**, not removed.
+
+- **What the tests pin NOW.** `test_exactly_one_candidate_approval_decision_exists`
+  requires the decision line to occur **exactly once** in the whole log, to
+  match the reserved value **exactly** (`re.fullmatch`, so no prefix or
+  suffix), and to sit under **exactly the `## AL-0064` heading** (located by
+  walking back to the nearest heading, so a line under any other entry
+  fails). New `TestRealCandidateApprovalRecord` runs the PRODUCTION verifier
+  `holdout._verify_approval_bound_to_audit_record` against the REAL AL-0064
+  entry and asserts:
+  - the record validates for the exact nine identities, the three ranges, the
+    approver and the exact UTC instant;
+  - the approval instant is timezone-aware, zero-offset and whole-second;
+  - each of the **nine** identities individually refused when altered;
+  - each of the three ranges individually refused when shifted by one day;
+  - a wrong approver refused (including case variants and empty);
+  - a timestamp one second off refused;
+  - wrong, prefix-attack (`AL-00640`), and malformed references
+    (`AL-064`, `AL-0064 (approved)`, leading space, lowercase) all refused;
+  - a DUPLICATE decision line refused as ambiguous — tested on a synthetic
+    copy of the real log in a temporary directory, never by editing the live
+    log;
+  - approving the candidate does **not** create
+    `config/data/partitions_active.yaml`;
+  - HOLDOUT remains sealed: the fence and research API still fail closed,
+    `holdout_opening()` still refuses, and every HOLDOUT-touching range is
+    refused by the pure range logic even under the approved model, while DEV
+    and SELECTION are permitted.
+  **The parser was NOT relaxed and no alternative approval format was
+  introduced** — only the assertions about the log's contents changed.
+
+- **Mechanical validation of the real record (read-only).** The approval was
+  validated by constructing an `ActivePartitions` model **in memory** and
+  running the real verifier against it. The successful publication path was
+  **never called** and `config/data/partitions_active.yaml` was **never
+  written**. Sixteen adversarial mutations — each of the nine identities,
+  each of the three ranges, the approver, the timestamp, a reference to a
+  different entry, and a prefix-attack reference — were every one REFUSED.
+
+- **Approval record as committed in AL-0064:** decision value as reserved by
+  PA-0003; `approved_by: Wian`; `approved_at_utc: 2026-08-20T05:12:27Z` (actual UTC,
+  whole-second); candidate `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32`; the eight dependency identities; ranges
+  DEV `2024-08-19..2025-11-07`, SELECTION `2025-11-10..2026-03-31`, HOLDOUT
+  `2026-04-01..2026-08-14`; disposition `PENDING_DATES_QUARANTINED`; calendar
+  state `PROVISIONAL_PENDING_DATES_QUARANTINED`. Scope: **DEV/SELECTION
+  activation only — HOLDOUT stays sealed.**
+
+- **Pre-approval reverification, and unchanged identities.** Before AL-0064
+  was written the candidate bytes were re-hashed and all eight dependency
+  identities recomputed from live evidence and compared three ways
+  (candidate-recorded / live / owner-approved) — all equal. Nothing has been
+  regenerated since: candidate `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32` (4,926 bytes) and the 12-artifact
+  rollup `d1f12009733a4a8c044b03e14a2e8f55b6c70c3f6713c88c6e6a3700fb789f4b` are byte-identical, as are the package hash
+  `39eea4a5…`, the effective config hash `3d4ad511…` and the policy SHA-256
+  `b8678e62…`.
+
+- **Verification:** full unit suite **1252/1252** passing; `git diff
+  --check` clean.
+
+- **NOTHING HAS BEEN ACTIVATED.** No `config/data/partitions_active.yaml`
+  exists; `load_active_partitions()` and `assert_research_range_allowed()`
+  still fail closed; `holdout_opening()` still refuses; **HOLDOUT and FORWARD
+  market records were not accessed, enumerated or decoded**; no normalization
+  has begun and no feature, label, sample, dataset, model or experiment work
+  occurred; no artifact and no candidate was regenerated or rewritten —
+  `--part finalize-activation-candidate` was NOT re-run. Creating the active
+  configuration remains a SEPARATE step requiring its own explicit approval.
+
+- **Commits this round:** `a28229d` (audit-log-only, AL-0064 approval),
+  `c323033` (test-only), and this entry as a separate audit-log-only
+  commit. No existing commit is amended. Nothing pushed.
