@@ -170,8 +170,13 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   8 dates DOCUMENT_VERIFIED (incl. 2025-01-09 + all seven 2026 dates),
   8 TRIANGULATED_OFFICIAL_ARCHIVE_UNAVAILABLE, **10 PENDING_EVIDENCE**,
   0 conflicts — evidence incomplete, activation still blocked.
-- **Research-eligibility quarantine PROPOSED 2026-08-19 (PA-0002,
-  `config/data/research_eligibility.yaml` + `nqresearch/eligibility.py`):**
+- **Research-eligibility quarantine APPROVED FOR ACTIVATION 2026-08-20
+  (PA-0002, `config/data/research_eligibility.yaml` +
+  `nqresearch/eligibility.py`; proposed 2026-08-19, approved by the project
+  owner after independent review — audit-log AL-0060; policy lifecycle is now
+  `APPROVED_FOR_ACTIVATION`). **POLICY approval only — no activation candidate
+  has been generated, partitions are still inactive and HOLDOUT is still
+  sealed.** Under the policy,
   the 10 PENDING_EVIDENCE dates are marked research-ineligible under
   canonical §50's predefined holiday/partial-session rule. **Their evidence
   states stay `PENDING_EVIDENCE` — quarantine is never a verification
@@ -182,7 +187,10 @@ answer — including "no robust edge found" — is success. This is not an HFT p
   them, is forbidden, with state reset at the next eligible session.
   **No MBO block is quarantined** (77/30 unchanged), coverage stays 516,
   the 8 causal roll switches are unchanged, and **partitions remain
-  inactive**.
+  inactive**. Approving the policy changed the effective config hash
+  (`48c2d27a` → `3d4ad511`), so **all 12 existing QA artifacts are now stale**
+  and must be regenerated from a clean tree after the transition is
+  committed — before any candidate is produced.
 - **Activation mechanism specified 2026-08-20 (PA-0003,
   `docs/protocol-amendments/PA-0003-activation-binding-and-publication.md`
   — authoritative; supplements, never weakens PA-0001/PA-0002):** the

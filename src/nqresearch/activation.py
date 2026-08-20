@@ -40,10 +40,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
 
 class ActivationError(RuntimeError):
@@ -57,6 +59,36 @@ def _sha256_file(path: Path) -> str:
 def _require(cond, message: str) -> None:
     if not cond:
         raise ActivationError(f"{message}; failing closed")
+
+
+@contextmanager
+def _as_activation_error(context: str):
+    """Translate the EXPECTED refusal exceptions raised by the evidence,
+    envelope and policy validators into ``ActivationError``.
+
+    The activation module's public contract (and the CLI that prints its
+    refusals) is ``ActivationError``. The validators it reuses belong to other
+    modules and raise their own fail-closed types, which would otherwise
+    escape as uncaught tracebacks even though the refusal is entirely
+    expected.
+
+    ONLY the three named refusal types are translated — there is deliberately
+    no ``except Exception`` here, so a programming error (TypeError,
+    AttributeError, KeyError, ...) still propagates loudly instead of being
+    disguised as an ordinary activation refusal. The original message is
+    preserved and the original exception is chained via ``raise ... from``.
+    """
+    from nqresearch.calendar_evidence import CalendarEvidenceError
+    from nqresearch.eligibility import EligibilityPolicyError
+    from nqresearch.holdout import PartitionsNotActiveError
+
+    try:
+        yield
+    except ActivationError:
+        raise                       # already the right type; keep its message
+    except (PartitionsNotActiveError, EligibilityPolicyError,
+            CalendarEvidenceError) as e:
+        raise ActivationError(f"{context}: {e}") from e
 
 
 def _closeout(data_root: Path) -> Path:
@@ -89,7 +121,6 @@ def _verify_activation_preconditions_from(repo_root: Path,
         COVERAGE_SUBSTANCE_ALGORITHM,
         DISPOSITION_PENDING_DATES_QUARANTINED,
         STATE_PENDING,
-        CalendarEvidenceError,
         coverage_substance_sha256,
         load_validated_matrix,
         matrix_file_sha256,
@@ -97,7 +128,6 @@ def _verify_activation_preconditions_from(repo_root: Path,
     )
     from nqresearch.eligibility import (
         POLICY_STATE_APPROVED,
-        EligibilityPolicyError,
         load_policy_for_activation,
         policy_sha256,
         verify_structural_quarantine_invariants,
@@ -105,7 +135,6 @@ def _verify_activation_preconditions_from(repo_root: Path,
     from nqresearch.holdout import (
         ACTIVE_PARTITIONS_FILENAME,
         CANDIDATE_STATE_NOT_ACTIVE,
-        PartitionsNotActiveError,
         _verify_artifact_envelope,
         _verify_neutral_proposal,
     )
@@ -123,12 +152,9 @@ def _verify_activation_preconditions_from(repo_root: Path,
     close = _closeout(droot)
 
     # 1. Policy must be exactly APPROVED_FOR_ACTIVATION (no relaxation path).
-    try:
+    with _as_activation_error(
+            "research-eligibility policy is not usable for activation"):
         policy, disposition = load_policy_for_activation(root, droot)
-    except (EligibilityPolicyError, CalendarEvidenceError) as e:
-        raise ActivationError(
-            f"research-eligibility policy is not usable for activation: {e}"
-        ) from e
     _require(policy.meta.status == POLICY_STATE_APPROVED,
              f"policy lifecycle is {policy.meta.status!r}, not "
              f"{POLICY_STATE_APPROVED}")
@@ -137,7 +163,9 @@ def _verify_activation_preconditions_from(repo_root: Path,
 
     # 2. Evidence: matrix validates; the ten pending dates are exactly the
     #    quarantined set; every state is still truthfully PENDING_EVIDENCE.
-    matrix = load_validated_matrix(root, droot)
+    with _as_activation_error("calendar evidence matrix is not usable for "
+                              "activation"):
+        matrix = load_validated_matrix(root, droot)
     pending = pending_dates(matrix)
     _require(set(pending) == set(policy.dates),
              "the quarantine policy does not cover exactly the pending dates")
@@ -147,7 +175,8 @@ def _verify_activation_preconditions_from(repo_root: Path,
              "a pending date has been relabelled away from PENDING_EVIDENCE")
 
     # 3. Structural quarantine invariants + frozen corpus counts.
-    facts = verify_structural_quarantine_invariants(root, droot)
+    with _as_activation_error("structural quarantine invariants do not hold"):
+        facts = verify_structural_quarantine_invariants(root, droot)
 
     # 4. Every activation-bound artifact: identity, structure and CURRENT
     #    clean committed envelope.
@@ -166,11 +195,15 @@ def _verify_activation_preconditions_from(repo_root: Path,
         raw = p.read_bytes()
         try:
             doc = json.loads(raw.decode("utf-8"))
-        except Exception as e:
-            raise ActivationError(f"{fname} is malformed: {e}; failing closed")
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise ActivationError(
+                f"{fname} is malformed: {e}; failing closed") from e
         _require(doc.get("artifact") == artifact,
                  f"{fname} declares artifact {doc.get('artifact')!r}")
-        _verify_artifact_envelope(fname, doc)   # clean committed tree, current
+        # Clean committed tree, current config and package code.
+        with _as_activation_error(
+                f"activation-bound artifact {fname} is not usable"):
+            _verify_artifact_envelope(fname, doc)
         docs[key], ident[key] = doc, hashlib.sha256(raw).hexdigest()
 
     # 5. Coverage: substance digest bound by the matrix AND the exact
@@ -210,10 +243,8 @@ def _verify_activation_preconditions_from(repo_root: Path,
     #    exact same neutrality rule the fence applies at activation time is
     #    reused here, so the two layers cannot drift apart.
     prop = docs["proposal"]
-    try:
+    with _as_activation_error("partition proposal is unusable"):
         _verify_neutral_proposal(prop)
-    except PartitionsNotActiveError as e:
-        raise ActivationError(f"partition proposal is unusable: {e}") from e
     _require(prop.get("state") == CANDIDATE_STATE_NOT_ACTIVE,
              f"source proposal state is {prop.get('state')!r}, expected "
              f"{CANDIDATE_STATE_NOT_ACTIVE}")
@@ -244,19 +275,20 @@ def _verify_activation_preconditions_from(repo_root: Path,
              "an active partition configuration already exists")
 
     from nqresearch.calendar import calendar_identity
-    identities = {
-        "partition_proposal_sha256": ident["proposal"],
-        "effective_calendar_sha256":
-            calendar_identity(root)["effective_calendar_sha256"],
-        "evidence_matrix_sha256": matrix_file_sha256(root),
-        "cme_correspondence_sha256":
-            {s.id: s for s in matrix.sources}[
-                matrix.archive_unavailability.email_source].files[0].sha256,
-        "research_eligibility_sha256": policy_sha256(root),
-        "coverage_artifact_sha256": ident["coverage"],
-        "mbo_blocks_sha256": ident["blocks"],
-        "front_contract_series_sha256": ident["front"],
-    }
+    with _as_activation_error("activation identities are not computable"):
+        identities = {
+            "partition_proposal_sha256": ident["proposal"],
+            "effective_calendar_sha256":
+                calendar_identity(root)["effective_calendar_sha256"],
+            "evidence_matrix_sha256": matrix_file_sha256(root),
+            "cme_correspondence_sha256":
+                {s.id: s for s in matrix.sources}[
+                    matrix.archive_unavailability.email_source].files[0].sha256,
+            "research_eligibility_sha256": policy_sha256(root),
+            "coverage_artifact_sha256": ident["coverage"],
+            "mbo_blocks_sha256": ident["blocks"],
+            "front_contract_series_sha256": ident["front"],
+        }
     return {
         "disposition": disposition,
         "calendar_verification_state": prop["calendar_verification_state"],
@@ -275,8 +307,12 @@ def _verify_activation_preconditions_from(repo_root: Path,
 def verify_activation_preconditions() -> dict:
     """PUBLIC: re-verify every mechanical precondition for activation against
     the REAL repository and data root. No path injection: a caller can never
-    substitute a fabricated tree."""
-    return _verify_activation_preconditions_from(*_roots(None, None))
+    substitute a fabricated tree.
+
+    Every EXPECTED refusal surfaces as ``ActivationError``; programming errors
+    are never swallowed."""
+    with _as_activation_error("activation preconditions do not hold"):
+        return _verify_activation_preconditions_from(*_roots(None, None))
 
 
 def _candidate_payload(proven: dict) -> dict:
@@ -332,8 +368,10 @@ def finalize_activation_candidate() -> dict:
     ``state=READY_FOR_ACTIVATION_APPROVAL``, ``structural_ready=true``,
     ``activation_ready=false``. It can never activate research access by
     itself. Fail-closed; no override or path injection of any kind exists.
+    Every EXPECTED refusal surfaces as ``ActivationError``.
     """
-    return _finalize_activation_candidate_from(*_roots(None, None))
+    with _as_activation_error("activation candidate cannot be finalized"):
+        return _finalize_activation_candidate_from(*_roots(None, None))
 
 
 def _read_candidate(data_root: Path) -> tuple[dict, str]:
@@ -347,7 +385,7 @@ def _read_candidate(data_root: Path) -> tuple[dict, str]:
     raw = cpath.read_bytes()
     try:
         return json.loads(raw.decode("utf-8")), hashlib.sha256(raw).hexdigest()
-    except Exception as e:
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
         raise ActivationError(
             f"activation candidate {cpath.name} is malformed: {e}; "
             "failing closed"
@@ -501,7 +539,6 @@ def _generate_active_partitions_from(
         ACTIVE_PARTITIONS_FILENAME,
         CANDIDATE_ARTIFACT_FILENAME,
         ActivePartitions,
-        PartitionsNotActiveError,
         _verify_activation_candidate,
         _verify_approval_bound_to_audit_record,
         _verify_artifact_envelope,
@@ -521,11 +558,9 @@ def _generate_active_partitions_from(
     proven = _verify_activation_preconditions_from(root, droot)
 
     candidate, candidate_sha = _read_candidate(droot)
-    _verify_artifact_envelope(CANDIDATE_ARTIFACT_FILENAME, candidate)
-    try:
+    with _as_activation_error("activation candidate is not usable"):
+        _verify_artifact_envelope(CANDIDATE_ARTIFACT_FILENAME, candidate)
         _verify_activation_candidate(candidate)
-    except PartitionsNotActiveError as e:
-        raise ActivationError(f"activation candidate is not usable: {e}") from e
 
     # The candidate's COMPLETE substance must equal the substance implied by
     # the preconditions just recomputed — not merely its bound identities.
@@ -560,16 +595,13 @@ def _generate_active_partitions_from(
     # Validate the schema and the human-approval binding BEFORE writing.
     try:
         parts = ActivePartitions(**payload)
-        _verify_approval_bound_to_audit_record(parts, root)
-    except PartitionsNotActiveError as e:
-        raise ActivationError(
-            f"human-approval audit entry does not authorise this exact "
-            f"activation: {e}"
-        ) from e
-    except Exception as e:
+    except ValidationError as e:
         raise ActivationError(
             f"active partition configuration would be invalid: {e}"
         ) from e
+    with _as_activation_error("human-approval audit entry does not authorise "
+                              "this exact activation"):
+        _verify_approval_bound_to_audit_record(parts, root)
 
     _atomic_write_text(out, yaml.safe_dump(payload, sort_keys=False))
     return out
@@ -582,9 +614,13 @@ def generate_active_partitions(
 ) -> Path:
     """PUBLIC: write ``config/data/partitions_active.yaml`` for the REAL
     repository — the ONLY record that confers activation. No repository,
-    data-root or candidate-path injection exists."""
-    return _generate_active_partitions_from(
-        approved_by, approval_reference, approved_at_utc, *_roots(None, None))
+    data-root or candidate-path injection exists.
+
+    Every EXPECTED refusal surfaces as ``ActivationError``."""
+    with _as_activation_error("activation cannot proceed"):
+        return _generate_active_partitions_from(
+            approved_by, approval_reference, approved_at_utc,
+            *_roots(None, None))
 
 
 def _unused_date_guard(_d: date) -> None:  # pragma: no cover - typing anchor

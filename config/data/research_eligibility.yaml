@@ -15,9 +15,17 @@ meta:
   amendment: docs/protocol-amendments/PA-0002-research-eligibility-quarantine.md
   # Lifecycle: PROPOSED_PENDING_INDEPENDENT_REVIEW ->
   # IMPLEMENTED_PENDING_ACTIVATION_APPROVAL -> APPROVED_FOR_ACTIVATION.
-  # ONLY the approved state can ever satisfy partition activation; this
-  # policy is deliberately NOT approved while under review.
-  status: IMPLEMENTED_PENDING_ACTIVATION_APPROVAL
+  # ONLY the approved state can ever satisfy partition activation. Approved
+  # by the project owner (Wian) on 2026-08-20 after independent review; see
+  # audit-log entry AL-0060.
+  #
+  # This is POLICY approval only. It is NOT approval of an activation
+  # candidate and it does NOT activate partitions: activation additionally
+  # requires a generated candidate, a separately recorded human approval of
+  # that exact candidate's SHA-256 (PA-0003), and
+  # config/data/partitions_active.yaml. The ten dates below remain truthfully
+  # PENDING_EVIDENCE and the calendar stays provisional.
+  status: APPROVED_FOR_ACTIVATION
   canonical_basis: >-
     canonical §50 allowed exclusion "predefined holiday/partial-session
     rule", with a machine-readable reason code per excluded session; defined

@@ -88,26 +88,53 @@ def _approval_entry(entry_id, identities, ranges=RANGES, approver=APPROVER,
 
 
 class TestLiveRefusal:
-    """Against the REAL repository the policy is still
-    IMPLEMENTED_PENDING_ACTIVATION_APPROVAL, so every entry point refuses."""
+    """Against the REAL repository every activation entry point must REFUSE,
+    and the refusal must surface as `ActivationError` — the module's public
+    contract and the type the CLI catches (AL-0061).
+
+    CHANGED REQUIREMENT (2026-08-20, AL-0060): the project owner approved
+    PA-0002, so the policy lifecycle gate is now legitimately cleared and the
+    refusal reason moved. The SAFETY property is unchanged and still pinned
+    here — activation is still impossible — and the new expected reason (the
+    twelve artifacts are stale under the new effective config hash) is
+    asserted explicitly, so a silent regression cannot pass as "still
+    refusing".
+    """
 
     @pytest.mark.parametrize("fn", [verify_activation_preconditions,
                                     finalize_activation_candidate])
-    def test_refuses_under_unapproved_live_policy(self, fn):
-        with pytest.raises(ActivationError, match="lifecycle state"):
+    def test_refuses_live_because_artifacts_are_stale(self, fn):
+        with pytest.raises(ActivationError) as exc:
             fn()
+        msg = str(exc.value)
+        assert "lifecycle state" not in msg, msg
+        assert ("different effective configuration" in msg
+                or "different package code" in msg), msg
+        # The original fail-closed cause is preserved, not discarded.
+        assert isinstance(exc.value.__cause__, PartitionsNotActiveError)
 
     def test_generate_active_partitions_refuses_live(self):
         with pytest.raises(ActivationError):
             generate_active_partitions(APPROVER, "AL-9999", STAMP)
 
-    def test_live_policy_is_not_approved(self):
+    def test_live_policy_is_approved_but_that_alone_activates_nothing(self):
         from nqresearch.eligibility import (
             NON_ACTIVATION_POLICY_STATES,
+            POLICY_STATE_APPROVED,
             load_policy,
         )
 
-        assert load_policy().meta.status in NON_ACTIVATION_POLICY_STATES
+        # The POLICY gate is cleared...
+        assert load_policy().meta.status == POLICY_STATE_APPROVED
+        assert load_policy().meta.status not in NON_ACTIVATION_POLICY_STATES
+        # ...and activation is still impossible, with no candidate and no
+        # active configuration anywhere.
+        from nqresearch.config import _repo_root
+
+        assert not (_repo_root() / "config" / "data"
+                    / "partitions_active.yaml").is_file()
+        with pytest.raises(ActivationError):
+            verify_activation_preconditions()
 
     def test_no_real_active_configuration_exists(self):
         from nqresearch.config import _repo_root
@@ -887,3 +914,186 @@ class TestApprovalTimestampIsUtc:
         src = inspect.getsource(act)
         assert "approved_at_utc.strftime" not in src
         assert "stamp.strftime(APPROVAL_TIMESTAMP_FORMAT)" in src
+
+
+class TestExceptionBoundary:
+    """AL-0061: every EXPECTED activation refusal must surface as
+    `ActivationError`, chained to its original fail-closed cause; programming
+    errors must NOT be translated. Synthetic trees only."""
+
+    def test_no_broad_except_handler_in_the_module(self):
+        # Parse the module and inspect real EXCEPT HANDLERS, so docstrings and
+        # comments (which name the rejected construct on purpose) cannot make
+        # this pass or fail spuriously.
+        import ast
+
+        import nqresearch.activation as act
+
+        broad = []
+        for node in ast.walk(ast.parse(inspect.getsource(act))):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            t = node.type
+            if t is None:
+                broad.append("bare except")
+                continue
+            elts = t.elts if isinstance(t, ast.Tuple) else [t]
+            names = [e.id for e in elts if isinstance(e, ast.Name)]
+            if {"Exception", "BaseException"} & set(names):
+                broad.append(ast.unparse(t))
+        assert broad == [], broad
+        # The translator names exactly the three expected refusal types.
+        translator = inspect.getsource(act._as_activation_error)
+        for name in ("PartitionsNotActiveError", "EligibilityPolicyError",
+                     "CalendarEvidenceError"):
+            assert name in translator, name
+
+    @pytest.mark.parametrize("exc", [
+        TypeError("programming error"),
+        AttributeError("programming error"),
+        KeyError("programming error"),
+        ValueError("programming error"),
+        RuntimeError("programming error"),
+    ])
+    def test_programming_errors_are_never_translated(self, exc):
+        from nqresearch.activation import _as_activation_error
+
+        with pytest.raises(type(exc)):
+            with _as_activation_error("ctx"):
+                raise exc
+
+    @pytest.mark.parametrize("factory", [
+        lambda: __import__("nqresearch.holdout", fromlist=["x"])
+                .PartitionsNotActiveError("fence says no"),
+        lambda: __import__("nqresearch.eligibility", fromlist=["x"])
+                .EligibilityPolicyError("policy says no"),
+        lambda: __import__("nqresearch.calendar_evidence", fromlist=["x"])
+                .CalendarEvidenceError("evidence says no"),
+    ])
+    def test_expected_refusals_are_translated_and_chained(self, factory):
+        from nqresearch.activation import _as_activation_error
+
+        original = factory()
+        with pytest.raises(ActivationError) as exc:
+            with _as_activation_error("ctx"):
+                raise original
+        assert "ctx: " in str(exc.value)
+        assert str(original) in str(exc.value)     # message preserved
+        assert exc.value.__cause__ is original     # chaining preserved
+
+    def test_activation_error_is_not_double_wrapped(self):
+        from nqresearch.activation import _as_activation_error
+
+        original = ActivationError("already the right type")
+        with pytest.raises(ActivationError) as exc:
+            with _as_activation_error("ctx"):
+                raise original
+        assert exc.value is original
+
+    def _stale_tree(self, tmp_path, mutation):
+        """A COMPLETE synthetic corpus with one activation-bound artifact
+        given a stale envelope, so the precondition envelope check fires."""
+        root, droot = fx.full_corpus_tree(tmp_path)
+        p = droot / "qa" / "m0_closeout" / "mbp1_full_history_coverage.json"
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        doc.update(mutation)
+        p.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+        # Re-bind the proposal's embedded identity so the failure is proven to
+        # come from the ENVELOPE, not from a stale hash.
+        prop_path = droot / "qa" / "m0_closeout" / "partition_proposal.json"
+        prop = json.loads(prop_path.read_text(encoding="utf-8"))
+        prop["research_eligibility_binding"]["structural_artifact_sha256"][
+            "coverage_artifact_sha256"] = hashlib.sha256(
+                p.read_bytes()).hexdigest()
+        prop_path.write_text(json.dumps(prop, indent=2), encoding="utf-8")
+        return root, droot
+
+    @pytest.mark.parametrize("mutation,match", [
+        ({"config_hash": "0" * 64}, "different effective configuration"),
+        ({"audit_code_hash": "0" * 64}, "different package code"),
+        ({"generation_git_clean": False}, "generation_git_clean"),
+    ])
+    def test_stale_precondition_artifact_raises_activation_error(
+            self, tmp_path, mutation, match):
+        with pytest.raises(ActivationError) as exc:
+            _verify_activation_preconditions_from(*self._stale_tree(
+                tmp_path, mutation))
+        assert match in str(exc.value)
+        assert "is not usable" in str(exc.value)
+        assert isinstance(exc.value.__cause__, PartitionsNotActiveError)
+
+    @pytest.mark.parametrize("mutation,match", [
+        ({"config_hash": "0" * 64}, "different effective configuration"),
+        ({"generation_git_clean": False}, "generation_git_clean"),
+        ({"git_sha": "b" * 40}, "commit object"),
+        # The strict schema's Literal is what rejects a wrong artifact type on
+        # this path, so the refusal names the expected literal value.
+        ({"artifact": "partition_proposal"}, "partition_activation_candidate"),
+        ({"activation_ready": True}, "self-certify"),
+        ({"unexpected_field": 1}, "not valid"),
+    ])
+    def test_stale_or_malformed_candidate_raises_activation_error(
+            self, tmp_path, mutation, match):
+        root, droot = fx.full_corpus_tree(tmp_path)
+        payload = _finalize_activation_candidate_from(root, droot)
+        p = droot / "qa" / "m0_closeout" / CANDIDATE_ARTIFACT_FILENAME
+        p.write_text(json.dumps({**fx.clean_envelope(), **payload, **mutation},
+                                indent=2, default=str), encoding="utf-8")
+        with pytest.raises(ActivationError) as exc:
+            _generate_active_partitions_from(APPROVER, "AL-0056", STAMP,
+                                             root, droot)
+        assert match in str(exc.value)
+        assert isinstance(exc.value.__cause__, PartitionsNotActiveError)
+        assert not (root / "config" / "data"
+                    / "partitions_active.yaml").exists()
+
+    def test_stale_evidence_matrix_raises_activation_error(self, tmp_path):
+        # A CalendarEvidenceError from matrix validation must also surface as
+        # ActivationError rather than escaping the module.
+        import yaml as _yaml
+
+        root, droot = fx.full_corpus_tree(tmp_path)
+        mp = root / "config" / "data" / "cme_calendar_evidence.yaml"
+        doc = _yaml.safe_load(mp.read_text(encoding="utf-8"))
+        doc["meta"]["observed_reference"]["substance_sha256"] = "0" * 64
+        mp.write_text(_yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+        with pytest.raises(ActivationError):
+            _verify_activation_preconditions_from(root, droot)
+
+
+class TestCliRefusesCleanly:
+    """`nqr data audit --part finalize-activation-candidate` must print a
+    refusal and return its normal non-zero exit code — never a traceback."""
+
+    def test_cli_refusal_is_clean_and_non_zero(self, capsys, monkeypatch):
+        import nqresearch.activation as act
+        from nqresearch.cli import main
+
+        def _refuse():
+            raise ActivationError("synthetic refusal; failing closed")
+
+        monkeypatch.setattr(act, "finalize_activation_candidate", _refuse)
+        code = main(["data", "audit", "--part",
+                     "finalize-activation-candidate"])
+        out = capsys.readouterr().out
+        assert code == 1
+        assert "[activation] REFUSED: synthetic refusal" in out
+        assert "Traceback" not in out
+
+    def test_cli_refuses_against_the_live_stale_artifacts(self, capsys):
+        # End-to-end against the REAL repository: the artifacts are stale, so
+        # the CLI must refuse cleanly. It reads the existing QA artifacts
+        # read-only and never reaches the artifact-writing branch.
+        from nqresearch import paths
+        from nqresearch.cli import main
+        from nqresearch.holdout import CANDIDATE_ARTIFACT_FILENAME
+
+        target = paths.data_root() / "qa" / "m0_closeout" / CANDIDATE_ARTIFACT_FILENAME
+        assert not target.is_file(), "a real candidate must not exist"
+        code = main(["data", "audit", "--part",
+                     "finalize-activation-candidate"])
+        out = capsys.readouterr().out
+        assert code == 1
+        assert "[activation] REFUSED:" in out
+        assert "Traceback" not in out
+        assert not target.is_file(), "the CLI must not have written a candidate"

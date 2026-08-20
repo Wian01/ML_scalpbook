@@ -3387,3 +3387,241 @@ in by the entry that creates the initial commit.
 - **Commit:** this entry is committed separately as an audit-log-only commit
   immediately after `d309628`; that implementation commit is NOT
   amended.
+
+## AL-0060 — PA-0002 research-eligibility quarantine APPROVED by the project owner; policy transitioned to APPROVED_FOR_ACTIVATION (policy approval only — nothing activated)
+
+- **Category:** protocol-relevant decision (human approval) + the
+  configuration transition it authorises, prepared for independent review.
+  AL-0055 through AL-0059 and every earlier entry are unchanged.
+- **Decision.** The project owner, **Wian**, explicitly approved the PA-0002
+  research-eligibility quarantine policy after independent review, and
+  authorised transitioning `config/data/research_eligibility.yaml` from
+  `IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` to **`APPROVED_FOR_ACTIVATION`**.
+  Approval date: 2026-08-20.
+- **Exactly these ten calendar dates are quarantined from research
+  eligibility** (unchanged from the proposal; not one added, removed or
+  substituted):
+
+  ```text
+  2024-09-02  2024-11-29  2025-01-01  2025-01-20  2025-02-17
+  2025-04-18  2025-05-26  2025-06-19  2025-07-03  2025-07-04
+  ```
+
+- **Counts (asserted mechanically, unchanged by the approval):** **10**
+  quarantined calendar dates → **8** observed DEV sessions excluded → **309**
+  eligible observed DEV sessions (of 317 observed, 318 DEV trading days).
+  2025-01-01 is not a CME trading day and 2025-04-18 closes 08:15 CT before
+  the 08:30 RTH open with no usable vendor records, so neither could ever
+  have produced an RTH sample. Coverage stays 516 expected sessions;
+  DEV/SELECTION/HOLDOUT stay 318/100/98 trading days; MBO stays 77 sessions /
+  30 blocks with **0** quarantined blocks and **0** spanning blocks; the 8
+  causal roll switches are unchanged.
+- **Evidence truth preserved.** All ten dates remain truthfully
+  **`PENDING_EVIDENCE`** in `config/data/cme_calendar_evidence.yaml`; the
+  matrix and the calendar overrides are BYTE-UNCHANGED. Quarantine is a
+  research-eligibility DISPOSITION, never a verification claim. The calendar
+  verification state remains **`PROVISIONAL_PENDING_DATES_QUARANTINED`**.
+- **THIS IS POLICY APPROVAL ONLY. It is NOT approval of an activation
+  candidate and it does NOT activate partitions.** No activation candidate
+  has been generated; no `config/data/partitions_active.yaml` exists; the
+  neutral `partition_proposal.json` remains `PROPOSED_NOT_ACTIVE` with
+  `activation_ready=false`; **HOLDOUT remains sealed**. Under PA-0003,
+  activation additionally requires a generated candidate, a separately
+  recorded human approval of that exact candidate's SHA-256 carrying the
+  reserved machine-readable decision line, and only then the active
+  configuration. **That decision line is deliberately NOT present in this
+  entry** and is not authorised now.
+- **Identities before → after this transition:**
+  - research-eligibility policy SHA-256:
+    `4dbd9432c24f5f7d86baf63c955c35ad7ca8a02225623ce445be26b150ad4bdc`
+    → `b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f`
+  - effective config hash:
+    `48c2d27ad59d14ecfda4b35690ee1ca5e6c56fedd2e8aa04380309763aa10ce5`
+    → `3d4ad51132b60c612b6212ca058fcc04243bd371c40b82f8ef1dd17fe7958fbd`
+  - package source hash: `ea44ea0b70457d4f643e9f38d6d0a2219e93f443bd40fdc2c78c7af056bf624f`
+    (unchanged — no `src/` file was touched)
+  - evidence-matrix SHA-256 binding: `f6099bd8…` (UNCHANGED)
+- **ARTIFACT STALENESS — expected and required.** The eligibility policy is
+  an input to `effective_config_hash()`, so changing it invalidates the
+  config-keyed identity of **all 12 existing QA artifacts** (8 acquisition +
+  coverage + MBO blocks + front series + partition proposal), which are
+  stamped `config_hash 48c2d27a…` from commit `37e38db`. They are therefore
+  now activation-INELIGIBLE by design. **No artifact was regenerated in this
+  step** and regeneration is NOT authorised here: it must happen only after
+  this transition is committed, from a clean committed tree, and only then
+  may an activation candidate be produced. Approving the policy also
+  invalidates the config-keyed QA caches, so that regeneration will incur a
+  full re-decode — accepted, as recorded in AL-0055 item (6).
+- **Change scope.** `config/data/research_eligibility.yaml`: ONLY
+  `meta.status` and the stale comment that asserted the policy was
+  "deliberately NOT approved while under review". The ten-date set, evidence
+  states, reason codes, semantics, counts, matrix binding, rationale,
+  canonical basis, policy id and version are all byte-identical.
+- **Tests (rule 7 — changed requirement, documented).**
+  `TestPolicyLifecycle` previously asserted the live policy was NOT
+  activation-approved; that requirement was CHANGED by this authorised human
+  decision, so those assertions are retargeted to pin the new state EXACTLY
+  (`== APPROVED_FOR_ACTIVATION`, and still `not in`
+  `NON_ACTIVATION_POLICY_STATES`). They were not relaxed: a new test proves
+  every other lifecycle state — including the near-misses `APPROVED` and
+  `approved_for_activation` — is still refused for activation. New
+  `TestApprovedPolicyInvariants` pins the exact ten dates, all ten evidence
+  states still `PENDING_EVIDENCE` in the live matrix, the 10 / 8 / 309 counts
+  plus 516 / 77 / 30 / 0 / 8, the provisional calendar state, the reason
+  codes and semantics, and the intact matrix binding. New
+  `test_activation.py::TestLiveRefusal` was retargeted the same way: the
+  SAFETY property (every live activation entry point must REFUSE) is
+  unchanged and still pinned, but the expected REASON moved from the policy
+  lifecycle to the stale-artifact envelope, and the test now asserts that new
+  reason explicitly so a silent regression cannot pass as "still refusing".
+  New `TestPolicyApprovalIsNotCandidateApproval` proves activation still refuses,
+  no `partitions_active.yaml` exists, the fence and research API still fail
+  closed, `holdout_opening()` still refuses, the neutral proposal state is
+  still the only thing the generator can emit, and — mechanically — that
+  **no `- decision:` line exists anywhere in this audit log**, so a policy
+  approval can never be mistaken for candidate approval.
+- **OBSERVATION FOR REVIEW (not fixed here, out of the authorised scope).**
+  With the policy gate now cleared, `verify_activation_preconditions()`
+  reaches the artifact-envelope check and raises
+  `PartitionsNotActiveError` (from `holdout._verify_artifact_envelope`)
+  rather than an `ActivationError`. The behaviour is fail-closed and correct
+  — activation is refused because the artifacts are stale — but the exception
+  type leaks across the module boundary instead of being wrapped like the
+  other precondition failures. Recorded here rather than changed, because
+  this step authorises only the policy transition. A regression test pins the
+  current behaviour and asserts the refusal reason is the stale
+  configuration, not a missing gate.
+- **Verification:** full unit suite **1198/1198** passing;
+  `git diff --check` clean. No artifact was regenerated (the four closeout
+  artifacts retain their 2026-08-19 23:39 modification times); no activation
+  candidate exists; no `config/data/partitions_active.yaml` exists; nothing
+  under `D:\nq-research` was modified; nothing under `D:\projects` or
+  `D:\futures-data-research-s3-backup` was read, scanned, hashed, modified or
+  deleted; HOLDOUT and FORWARD data were not accessed and no normalization
+  began.
+- **Files changed:** `config/data/research_eligibility.yaml` (status +
+  comment only), `CLAUDE.md`, `docs/data-specification.md`,
+  `docs/holdout-policy.md`, `tests/unit/test_eligibility.py`,
+  `tests/unit/test_activation.py`, `docs/implementation-audit-log.md`. Historical protocol statements
+  (PA-0001, PA-0002, PA-0003) and all earlier audit entries are unchanged.
+- **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0061 — Activation exception boundary normalized to ActivationError; accurate record of read-only D:\nq-research access during the AL-0060 verification
+
+- **Category:** implementation fix (remediation of the finding recorded in
+  AL-0060) + a correction to my own reporting in that verification round.
+  **AL-0060 is NOT altered** — it stands as written, including its
+  "OBSERVATION FOR REVIEW" paragraph, which this entry resolves. AL-0055
+  through AL-0059 and every earlier entry are likewise unchanged.
+
+- **(1) DEFECT FIXED — fail-closed exceptions leaked out of the activation
+  module.** `nqresearch.activation` advertises `ActivationError` as its
+  refusal type, and `nqr data audit --part finalize-activation-candidate`
+  catches exactly that. But the module reuses validators that live in other
+  modules and raise their own fail-closed types, and several call sites were
+  unwrapped, so an ENTIRELY EXPECTED refusal could escape as an uncaught
+  traceback. Confirmed leaking sites:
+  `_verify_artifact_envelope()` inside the activation-bound artifact loop of
+  `_verify_activation_preconditions_from()` and inside the candidate check of
+  `_generate_active_partitions_from()` (`PartitionsNotActiveError`);
+  `load_validated_matrix()` (`CalendarEvidenceError`); and
+  `verify_structural_quarantine_invariants()` (`EligibilityPolicyError`).
+  The leak became reachable in practice only once AL-0060 cleared the policy
+  gate, which is why it surfaced then.
+
+- **Remediation.** New `activation._as_activation_error(context)` context
+  manager translates EXACTLY three expected refusal types —
+  `PartitionsNotActiveError`, `EligibilityPolicyError`,
+  `CalendarEvidenceError` — into `ActivationError`, preserving the original
+  message (`f"{context}: {original}"`) and chaining the original via
+  `raise ... from e`. An `ActivationError` passing through is re-raised
+  unchanged rather than double-wrapped. **There is deliberately no
+  `except Exception` anywhere in the module** (asserted by a test): a
+  `TypeError`, `AttributeError`, `KeyError`, `ValueError` or `RuntimeError`
+  still propagates loudly instead of being disguised as an ordinary
+  activation refusal. The two remaining broad JSON guards were narrowed to
+  `(UnicodeDecodeError, json.JSONDecodeError)` and given proper chaining, and
+  the `ActivePartitions` construction now catches only pydantic's
+  `ValidationError`. Applied at every validation site plus, as a contract
+  guard, at all three PUBLIC entry points —
+  `verify_activation_preconditions()`, `finalize_activation_candidate()` and
+  `generate_active_partitions()` — so nothing expected can leak from a future
+  call site either.
+
+- **CLI.** `nqr data audit --part finalize-activation-candidate` now always
+  reaches its `except ActivationError` branch for an expected refusal,
+  printing `[activation] REFUSED: …` and returning exit code 1 with no
+  traceback. Regression-tested twice: once with a synthetic injected refusal,
+  and once end-to-end against the real repository (which refuses because the
+  twelve artifacts are stale), asserting exit code 1, the refusal line, the
+  absence of "Traceback", and — before and after — that no candidate file was
+  written.
+
+- **Tests.** The temporary `(ActivationError, PartitionsNotActiveError)`
+  tuples introduced in AL-0060 are REPLACED by strict `ActivationError`
+  assertions in both `test_activation.py` and `test_eligibility.py`, and the
+  live-refusal tests now additionally assert the chained
+  `__cause__` is the original `PartitionsNotActiveError`. New
+  `TestExceptionBoundary` (synthetic temporary trees only) covers: the
+  no-`except Exception` invariant and that the translator names exactly the
+  three expected types; five programming-error types passing through
+  untranslated; each of the three expected types translated WITH message and
+  chaining preserved; no double-wrapping; three stale-envelope mutations of a
+  precondition artifact (stale config hash, stale package hash, dirty
+  generation) with the proposal's embedded identity re-bound so the failure
+  is proven to come from the ENVELOPE rather than a stale hash; six stale or
+  malformed candidate mutations, each also asserting no
+  `partitions_active.yaml` was created; and a corrupted evidence-matrix
+  substance digest proving `CalendarEvidenceError` is translated too.
+
+- **(2) CORRECTION TO MY OWN AL-0060 REPORTING — read-only D: access.** In the
+  AL-0060 round I wrote that "nothing under `D:\nq-research` was modified"
+  but also, in the session summary, phrasing that implied it had not been
+  READ. That was imprecise. **Accurate record:** the 1198-test run and an
+  explicit modification-time check performed **READ-ONLY** access to the
+  existing closeout QA artifacts under
+  `D:\nq-research\data\qa\m0_closeout\` (`mbp1_full_history_coverage.json`,
+  `mbo_blocks_frozen.json`, `mbp1_front_contract_series.json`,
+  `partition_proposal.json`) plus the immutable calendar-evidence reference
+  files that matrix validation reads. That is how the live regression tests
+  prove the real artifacts cannot activate. **No file under `D:` was written,
+  modified, moved, renamed, deleted or regenerated**, and **no HOLDOUT or
+  FORWARD market records were accessed, enumerated or decoded** — no raw
+  vendor data was opened at all. The same read-only access occurred in this
+  AL-0061 round.
+
+- **Separately confirmed, and unchanged:** nothing under `D:\projects` and
+  nothing under `D:\futures-data-research-s3-backup` was read, scanned,
+  inventoried, hashed, modified or deleted at any point.
+
+- **State unchanged by this entry.** Policy remains
+  **`APPROVED_FOR_ACTIVATION`** (SHA-256 `b8678e62…`); the exact ten
+  quarantined dates and the 10 / 8 / 309 counts are unchanged; all ten
+  evidence states remain `PENDING_EVIDENCE`; the calendar remains
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`; **no activation candidate
+  exists**; **no `config/data/partitions_active.yaml` exists**; the neutral
+  proposal remains `PROPOSED_NOT_ACTIVE` with `activation_ready=false`;
+  HOLDOUT remains sealed. **All 12 artifacts remain stale and
+  byte-unchanged** — no regeneration and no normalization occurred.
+
+- **Identity note.** This entry changes `src/nqresearch/activation.py`, so the
+  **package source hash moves**: `ea44ea0b70457d4f643e9f38d6d0a2219e93f443bd40fdc2c78c7af056bf624f`
+  -> `39eea4a5e93f31096fe96037d7414bc40a8a70af8fc684fcbe93196b34134a0c`. The
+  effective config hash is unchanged at `3d4ad511…` (no config file was
+  touched) and the policy SHA-256 is unchanged at `b8678e62…`. The twelve
+  artifacts were already stale under the AL-0060 config-hash change; the
+  package-hash move keeps them stale, which is the intended state until the
+  reviewed clean-tree regeneration.
+
+- **Verification:** full unit suite **1220/1220** passing;
+  `git diff --check` clean; every expected activation refusal surfaces as
+  `ActivationError`; the CLI refuses with exit code 1 and no traceback.
+
+- **Files changed:** `src/nqresearch/activation.py` (exception translator,
+  narrowed guards, public-boundary contract), `tests/unit/test_activation.py`
+  (strict assertions, `TestExceptionBoundary`, `TestCliRefusesCleanly`),
+  `tests/unit/test_eligibility.py` (strict assertions, docstring),
+  `docs/implementation-audit-log.md`. No configuration file changed; the
+  PA-0002 transition prepared in AL-0060 is carried forward untouched.
+
+- **Commit:** none (stop-for-review rule); nothing pushed.

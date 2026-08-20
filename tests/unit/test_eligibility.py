@@ -8,7 +8,7 @@ is never decoded.
 
 import inspect
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 import pytest
 import yaml
@@ -28,6 +28,7 @@ from nqresearch.calendar_evidence import (
 from nqresearch.eligibility import (
     CANONICAL_ALLOWED_REASON_CODES,
     NON_ACTIVATION_POLICY_STATES,
+    POLICY_STATE_APPROVED,
     EligibilityPolicy,
     EligibilityPolicyError,
     IneligibleSessionError,
@@ -377,26 +378,57 @@ class TestSessionIdValidation:
 
 
 class TestPolicyLifecycle:
-    def test_live_policy_is_not_activation_approved(self):
-        # The live policy must stay in a non-activation state while under
-        # review.
-        assert load_policy().meta.status in NON_ACTIVATION_POLICY_STATES
+    """CHANGED REQUIREMENT (2026-08-20, AL-0060): the project owner explicitly
+    APPROVED the PA-0002 quarantine policy after independent review, so the
+    live lifecycle state moved
+    IMPLEMENTED_PENDING_ACTIVATION_APPROVAL -> APPROVED_FOR_ACTIVATION.
+    These tests are retargeted at the new required state, NOT relaxed: the
+    approved state is pinned EXACTLY, every other state is still refused, and
+    TestApprovedPolicyInvariants below asserts that the approval changed
+    nothing substantive."""
 
-    def test_activation_and_research_entry_points_reject_unapproved(self):
+    def test_live_policy_is_exactly_activation_approved(self):
+        assert load_policy().meta.status == POLICY_STATE_APPROVED
+        assert load_policy().meta.status not in NON_ACTIVATION_POLICY_STATES
+
+    def test_activation_and_research_entry_points_now_accept_the_policy(self):
         from nqresearch.eligibility import (
             load_policy_for_activation,
             load_policy_for_research,
         )
 
-        for fn in (load_policy_for_activation, load_policy_for_research):
-            with pytest.raises(EligibilityPolicyError, match="lifecycle"):
-                fn()
+        policy, disposition = load_policy_for_activation()
+        assert policy.meta.status == POLICY_STATE_APPROVED
+        assert disposition == DISPOSITION_PENDING_DATES_QUARANTINED
+        rpolicy, rdisposition = load_policy_for_research()
+        assert rpolicy.meta.status == POLICY_STATE_APPROVED
+        assert rdisposition == DISPOSITION_PENDING_DATES_QUARANTINED
+
+    def test_only_the_approved_state_parses_for_activation(self, tmp_path):
+        # Every non-approved lifecycle state must STILL be refused, so the
+        # transition cannot be read as "any state now works".
+        from nqresearch.eligibility import (
+            _load_validated_policy,
+            load_policy,
+        )
+
+        real = load_policy()
+        others = sorted(NON_ACTIVATION_POLICY_STATES) + [
+            "APPROVED", "SYNTHETIC", "approved_for_activation", ""]
+        for i, state in enumerate(others):
+            root = _synth_repo_with_status(tmp_path / f"s{i}", real, state)
+            with pytest.raises(Exception):
+                _load_validated_policy(
+                    root, allowed_states=(POLICY_STATE_APPROVED,))
+        # ...and the REAL approved policy still validates for activation.
+        assert _load_validated_policy(
+            allowed_states=(POLICY_STATE_APPROVED,))[0].meta.status             == POLICY_STATE_APPROVED
 
     def test_reporting_entry_point_accepts_current_state(self):
         from nqresearch.eligibility import load_policy_for_reporting
 
         policy, disposition = load_policy_for_reporting()
-        assert policy.meta.status in NON_ACTIVATION_POLICY_STATES
+        assert policy.meta.status == POLICY_STATE_APPROVED
         assert disposition == DISPOSITION_PENDING_DATES_QUARANTINED
 
     def test_no_public_entry_point_exposes_allowed_states_or_override(self):
@@ -771,3 +803,188 @@ class TestHoldoutStillFailsClosed:
 
         with pytest.raises(PartitionsNotActiveError):
             research_eligible_sessions(date(2024, 10, 1), date(2024, 10, 31))
+
+
+def _synth_repo_with_status(root, real_policy, status):
+    """A synthetic copy of the REAL policy with only its lifecycle status
+    replaced, so state handling is tested without touching the live file."""
+    import shutil
+
+    import yaml as _yaml
+
+    from nqresearch.config import _repo_root
+
+    (root / "config" / "data").mkdir(parents=True, exist_ok=True)
+    shutil.copy(_repo_root() / "config" / "data" / "cme_calendar_evidence.yaml",
+                root / "config" / "data" / "cme_calendar_evidence.yaml")
+    src = _repo_root() / "config" / "data" / "research_eligibility.yaml"
+    doc = _yaml.safe_load(src.read_text(encoding="utf-8"))
+    doc["meta"]["status"] = status
+    (root / "config" / "data" / "research_eligibility.yaml").write_text(
+        _yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    return root
+
+
+class TestApprovedPolicyInvariants:
+    """AL-0060: approving the POLICY must change the lifecycle state and
+    NOTHING else. Every fact the approval statement asserts is pinned here."""
+
+    def test_status_is_exactly_the_approved_constant(self):
+        assert load_policy().meta.status == POLICY_STATE_APPROVED
+        assert POLICY_STATE_APPROVED == "APPROVED_FOR_ACTIVATION"
+
+    def test_exact_ten_date_set_unchanged(self):
+        assert sorted(quarantined_sessions()) == REAL_TEN
+        assert len(REAL_TEN) == 10
+
+    def test_all_ten_evidence_states_remain_pending(self):
+        # Quarantine is a disposition, NEVER a verification claim.
+        from nqresearch.calendar_evidence import load_matrix, pending_dates
+        from nqresearch.config import _repo_root
+
+        for s in load_policy().quarantined_sessions:
+            assert s.evidence_state_at_policy_time == STATE_PENDING
+            assert s.research_eligible is False
+        pending = pending_dates(load_matrix(_repo_root()))
+        assert sorted(pending) == REAL_TEN
+        assert set(pending.values()) == {STATE_PENDING}
+
+    def test_counts_remain_ten_eight_three_hundred_and_nine(self):
+        facts = verify_structural_quarantine_invariants()
+        assert facts["n_quarantined"] == 10
+        assert facts["n_excluded_observed_dev_sessions"] == 8
+        assert facts["n_eligible_dev_sessions"] == 309
+        assert facts["n_observed_dev_sessions"] == 317
+        assert facts["n_coverage_expected_sessions"] == 516
+        assert facts["n_mbo_sessions"] == 77
+        assert facts["n_mbo_blocks"] == 30
+        assert facts["n_spanning_mbo_blocks"] == 0
+        assert facts["n_roll_switches"] == 8
+
+    def test_calendar_state_remains_provisional_quarantined(self):
+        from nqresearch import paths
+        from nqresearch.calendar_evidence import (
+            CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED,
+            current_calendar_verification_state,
+        )
+        from nqresearch.config import _repo_root
+
+        assert (current_calendar_verification_state(_repo_root(),
+                                                    paths.data_root())
+                == CALENDAR_EVIDENCE_PROVISIONAL_QUARANTINED)
+
+    def test_reason_codes_and_semantics_unchanged(self):
+        p = load_policy()
+        for s in p.quarantined_sessions:
+            assert s.reason_code == "PREDEFINED_HOLIDAY_PARTIAL_SESSION_RULE"
+        assert p.semantics.research_use == "FORBIDDEN"
+        assert p.semantics.n_mbo_blocks_quarantined == 0
+        assert p.semantics.holdout_sealed is True
+        assert p.semantics.raw_data_unchanged is True
+
+    def test_policy_still_binds_the_committed_evidence_matrix(self):
+        verify_policy_bound_to_evidence()  # must not raise
+
+
+class TestPolicyApprovalIsNotCandidateApproval:
+    """The single most dangerous misreading of AL-0060: policy approval is not
+    activation. Nothing below may become possible merely because the lifecycle
+    state changed."""
+
+    def test_activation_still_refuses_after_policy_approval(self):
+        """Approving the policy clears ONE gate and no others.
+
+        It also makes the artifact staleness visible: approving PA-0002
+        changed the effective config hash, so the twelve artifacts stamped
+        under the previous hash are now activation-INELIGIBLE until they are
+        regenerated from a clean tree. Both refusals are fail-closed and,
+        since AL-0061, both surface as `ActivationError` — the activation
+        module's public contract — with the original
+        `PartitionsNotActiveError` preserved as the chained cause.
+        """
+        from nqresearch.activation import (
+            ActivationError,
+            generate_active_partitions,
+            verify_activation_preconditions,
+        )
+
+        for call in (
+            verify_activation_preconditions,
+            lambda: generate_active_partitions(
+                "nobody", "AL-0060",
+                datetime(2026, 8, 20, 0, 0, 0, tzinfo=timezone.utc)),
+        ):
+            with pytest.raises(ActivationError):
+                call()
+
+    def test_refusal_reason_is_stale_artifacts_not_a_missing_gate(self):
+        # The policy gate is genuinely cleared now, so the FIRST refusal is
+        # the stale-artifact one. This pins the expected staleness rather
+        # than letting a silent regression pass as "still refusing".
+        from nqresearch.activation import (
+            ActivationError,
+            verify_activation_preconditions,
+        )
+
+        with pytest.raises(ActivationError) as exc:
+            verify_activation_preconditions()
+        msg = str(exc.value)
+        assert "lifecycle state" not in msg, msg
+        assert ("different effective configuration" in msg
+                or "different package code" in msg), msg
+
+    def test_no_partitions_active_yaml_exists(self):
+        from nqresearch.config import _repo_root
+
+        assert not (_repo_root() / "config" / "data"
+                    / "partitions_active.yaml").is_file()
+
+    def test_fence_and_research_api_still_fail_closed(self):
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            assert_research_range_allowed,
+            load_active_partitions,
+        )
+        from nqresearch.research import research_input_entries
+
+        with pytest.raises(PartitionsNotActiveError):
+            load_active_partitions()
+        with pytest.raises(PartitionsNotActiveError):
+            assert_research_range_allowed(date(2024, 10, 1), date(2024, 10, 31))
+        with pytest.raises(PartitionsNotActiveError):
+            research_input_entries(date(2024, 10, 1), date(2024, 10, 31))
+
+    def test_holdout_opening_still_refuses_unconditionally(self):
+        from nqresearch.holdout import HoldoutFenceError, holdout_opening
+
+        with pytest.raises(HoldoutFenceError, match="not implemented"):
+            holdout_opening()
+
+    def test_no_candidate_approval_decision_exists_in_the_audit_log(self):
+        # The PA-0003 machine-readable candidate decision is reserved for a
+        # LATER human approval of an exact generated candidate. Approving the
+        # policy must never have written one.
+        import re
+
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import APPROVAL_DECISION_VALUE
+
+        text = (_repo_root() / "docs" / "implementation-audit-log.md").read_text(
+            encoding="utf-8")
+        decisions = [ln for ln in text.splitlines()
+                     if re.match(r"^\s*-\s*decision\s*:", ln)]
+        assert decisions == [], decisions
+        assert not any(re.match(r"^\s*-\s*decision\s*:\s*"
+                                + re.escape(APPROVAL_DECISION_VALUE), ln)
+                       for ln in text.splitlines())
+
+    def test_neutral_proposal_state_constant_is_still_required(self):
+        # The generator can only ever emit the neutral state for the proposal.
+        import inspect
+
+        import nqresearch.qa.closeout as co
+
+        src = inspect.getsource(co)
+        assert '"state": "PROPOSED_NOT_ACTIVE"' in src
+        assert '"activation_ready": False' in src
+        assert '"activation_ready": True' not in src

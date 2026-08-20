@@ -582,7 +582,14 @@ PROVISIONAL_DOCUMENT_VERIFICATION_PENDING and `activation_ready=false`.
 
 ## 6d. Research-eligibility quarantine (2026-08-19; protocol amendment PA-0002)
 
-**Ten calendar dates are PROPOSED for research quarantine** — 2024-09-02,
+**Ten calendar dates are quarantined from research eligibility** — the
+policy was **APPROVED FOR ACTIVATION by the project owner (Wian) on
+2026-08-20** after independent review (audit-log AL-0060), moving
+`config/data/research_eligibility.yaml` from
+`IMPLEMENTED_PENDING_ACTIVATION_APPROVAL` to `APPROVED_FOR_ACTIVATION`.
+**This is POLICY approval only: no activation candidate has been generated,
+partitions remain inactive, and HOLDOUT stays sealed.** The ten dates are
+2024-09-02,
 2024-11-29, 2025-01-01, 2025-01-20, 2025-02-17, 2025-04-18, 2025-05-26,
 2025-06-19, 2025-07-03, 2025-07-04 — i.e. exactly the §6c
 `PENDING_EVIDENCE` set. **Their calendar-evidence states are UNCHANGED and

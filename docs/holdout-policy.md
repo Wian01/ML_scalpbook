@@ -58,8 +58,11 @@ approval format records whole seconds only; and
 create-if-absent operation that can never overwrite an existing activation.
 PA-0003 changes no evidence state and is not activation approval.
 
-Under the proposed **PA-0002 research-eligibility quarantine** (data-spec
-§6d) the ten `PENDING_EVIDENCE` dates are dispositioned — not verified —
+Under the **PA-0002 research-eligibility quarantine** (data-spec §6d) —
+**APPROVED FOR ACTIVATION by the project owner on 2026-08-20 after
+independent review (audit-log AL-0060); policy lifecycle
+`APPROVED_FOR_ACTIVATION`** — the ten `PENDING_EVIDENCE` dates are
+dispositioned — not verified —
 by a committed policy (`config/data/research_eligibility.yaml`), whose
 SHA-256 becomes a further mandatory activation binding alongside the
 proposal, effective-calendar, evidence-matrix and GCC-correspondence hashes
@@ -73,6 +76,17 @@ calendar is never relabelled `DOCUMENT_VERIFIED` (it stays
 permission to open HOLDOUT** — the separate opening workflow of §4 below
 still governs, and partitions remain `PROPOSED_NOT_ACTIVE` with
 `activation_ready=false`.
+
+**Approving the POLICY is not approving an activation candidate.** As of
+2026-08-20 the eligibility policy is `APPROVED_FOR_ACTIVATION`, but **no
+`partition_activation_candidate.json` has been generated**, **no
+`config/data/partitions_active.yaml` exists**, the neutral
+`partition_proposal.json` is still `PROPOSED_NOT_ACTIVE` with
+`activation_ready=false`, and **HOLDOUT remains sealed**. Activation still
+requires, per PA-0003: a generated candidate whose exact SHA-256 is
+separately approved by a human in an append-only audit entry carrying
+`- decision: APPROVE_PA_0002_ACTIVATION_CANDIDATE` alongside all nine
+identities, and only then the active configuration.
 
 Historical note: freezing the dates was a
 Milestone 0 deliverable (canonical §60 items 11–12) and must precede feature
