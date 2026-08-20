@@ -961,11 +961,15 @@ class TestPolicyApprovalIsNotCandidateApproval:
             holdout_opening()
 
     def test_exactly_one_candidate_approval_decision_exists(self):
-        # CHANGED REQUIREMENT (AL-0064): the project owner approved the exact
-        # candidate, so the reserved decision line now legitimately EXISTS.
-        # It must exist exactly ONCE, carry exactly the reserved value, and
-        # live under exactly AL-0064 — a second one anywhere would make
-        # approval ambiguous.
+        # AUDIT-HYGIENE FACT about the CURRENT live log, not a rule the
+        # production verifier enforces globally (AL-0066): today exactly one
+        # candidate has been approved, so exactly one decision line exists,
+        # and it lives under AL-0064. PA-0003 §4 scopes required-field
+        # uniqueness to the specifically REFERENCED entry, so a future
+        # independently approved candidate would legitimately add its own
+        # decision line under its own new entry — at which point this
+        # current-state assertion is the thing that must change, not the
+        # parser.
         import re
 
         from nqresearch.config import _repo_root
@@ -1157,29 +1161,136 @@ class TestRealCandidateApprovalRecord:
                                       "approved_at_utc": self._stamp()}),
                 _repo_root())
 
-    def test_duplicate_approval_field_is_refused(self, tmp_path):
-        # A synthetic copy of the REAL entry with one field repeated must be
-        # refused as ambiguous. The live log is never modified.
-        import shutil
+    # ---------------------------------------------------------------- scope
+    # PA-0003 §4 binds activation to ONE exact referenced entry and requires
+    # each field exactly once INSIDE that entry. It does NOT impose global
+    # decision-line uniqueness across the whole log, and the production
+    # verifier must not be changed to do so: a future independently approved
+    # candidate would legitimately carry its own decision line in its own
+    # referenced entry. These tests therefore operate INSIDE AL-0064.
 
+    def _synthetic_log(self, tmp_path, *, insert_in_al0064=(),
+                       append_after_log=(), drop_from_al0064=(),
+                       duplicate_heading=False):
+        """A synthetic copy of the REAL log in a temporary tree, mutated only
+        where asked. The live log is NEVER modified."""
         from nqresearch.config import _repo_root
+
+        root = tmp_path / "repo"
+        (root / "docs").mkdir(parents=True, exist_ok=True)
+        (root / "config" / "data").mkdir(parents=True, exist_ok=True)
+        text = (_repo_root() / "docs"
+                / "implementation-audit-log.md").read_text(encoding="utf-8")
+        lines = text.splitlines()
+
+        start = next(i for i, ln in enumerate(lines)
+                     if ln.startswith("## AL-0064 "))
+        end = next((i for i in range(start + 1, len(lines))
+                    if lines[i].startswith("## AL-")), len(lines))
+
+        body = lines[start:end]
+        if drop_from_al0064:
+            body = [ln for ln in body
+                    if not any(ln.strip().startswith(f"- {k}:")
+                               for k in drop_from_al0064)]
+        # Insert just BEFORE the next "## AL-" heading, i.e. still inside the
+        # AL-0064 section the approval reference names.
+        body = body + list(insert_in_al0064)
+
+        out = lines[:start] + body + lines[end:] + list(append_after_log)
+        if duplicate_heading:
+            out = out + [""] + lines[start:end]
+        (root / "docs" / "implementation-audit-log.md").write_text(
+            "\n".join(out) + "\n", encoding="utf-8")
+        return root
+
+    def _field_line(self, key):
+        """The exact `- key: value` line as it appears inside AL-0064."""
+        from nqresearch.config import _repo_root
+
+        text = (_repo_root() / "docs"
+                / "implementation-audit-log.md").read_text(encoding="utf-8")
+        entry = text.split("## AL-0064 ")[1].split("\n## ")[0]
+        return next(ln for ln in entry.splitlines()
+                    if ln.strip().startswith(f"- {key}:"))
+
+    @pytest.mark.parametrize("key", [
+        "decision", "activation_candidate_sha256", "approved_by",
+        "approved_at_utc", "holdout_range", "calendar_state",
+    ])
+    def test_identical_duplicate_field_inside_al0064_is_refused(
+            self, tmp_path, key):
+        # Even a byte-IDENTICAL repeat is ambiguous: a reader cannot tell
+        # which line a later edit was meant to change.
         from nqresearch.holdout import (
             PartitionsNotActiveError,
             _verify_approval_bound_to_audit_record,
         )
 
-        root = tmp_path / "repo"
-        (root / "docs").mkdir(parents=True)
-        (root / "config" / "data").mkdir(parents=True)
-        src = _repo_root() / "docs" / "implementation-audit-log.md"
-        text = src.read_text(encoding="utf-8")
-        line = next(ln for ln in text.splitlines()
-                    if ln.strip().startswith("- decision:"))
-        (root / "docs" / "implementation-audit-log.md").write_text(
-            text + "\n" + line + "\n", encoding="utf-8")
+        root = self._synthetic_log(
+            tmp_path, insert_in_al0064=[self._field_line(key)])
         with pytest.raises(PartitionsNotActiveError, match="duplicate"):
             _verify_approval_bound_to_audit_record(self._parts(), root)
-        assert shutil  # keep the import meaningful
+
+    def test_conflicting_duplicate_field_inside_al0064_is_refused(self,
+                                                                  tmp_path):
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        root = self._synthetic_log(
+            tmp_path, insert_in_al0064=["- approved_by: Someone Else"])
+        with pytest.raises(PartitionsNotActiveError, match="duplicate"):
+            _verify_approval_bound_to_audit_record(self._parts(), root)
+
+    @pytest.mark.parametrize("key", ["decision", "approved_by",
+                                     "activation_candidate_sha256",
+                                     "quarantine_disposition"])
+    def test_field_under_another_entry_cannot_satisfy_al0064(self, tmp_path,
+                                                             key):
+        # Remove a required field from AL-0064 and re-declare it under a LATER
+        # entry. The verifier is scoped to the referenced entry, so the field
+        # is still MISSING and the approval is refused.
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        root = self._synthetic_log(
+            tmp_path, drop_from_al0064=[key],
+            append_after_log=["", "## AL-9999 unrelated later entry", "",
+                              self._field_line(key)])
+        with pytest.raises(PartitionsNotActiveError,
+                           match=f"missing the machine-readable approval "
+                                 f"field '- {key}"):
+            _verify_approval_bound_to_audit_record(self._parts(), root)
+
+    def test_duplicate_al0064_heading_is_refused(self, tmp_path):
+        from nqresearch.holdout import (
+            PartitionsNotActiveError,
+            _verify_approval_bound_to_audit_record,
+        )
+
+        root = self._synthetic_log(tmp_path, duplicate_heading=True)
+        with pytest.raises(PartitionsNotActiveError, match="ambiguous"):
+            _verify_approval_bound_to_audit_record(self._parts(), root)
+
+    def test_unrelated_later_entry_is_outside_the_referenced_record(
+            self, tmp_path):
+        # A whole second approval-shaped block AFTER AL-0064 must neither
+        # break nor complete the referenced record: AL-0064 is self-contained,
+        # so the real approval still validates.
+        from nqresearch.config import _repo_root
+        from nqresearch.holdout import _verify_approval_bound_to_audit_record
+
+        entry = (_repo_root() / "docs" / "implementation-audit-log.md"
+                 ).read_text(encoding="utf-8").split("## AL-0064 ")[1]
+        block = ["", "## AL-9998 a later, unrelated entry", ""] + [
+            ln for ln in entry.split("\n## ")[0].splitlines()
+            if ln.strip().startswith("- ")]
+        root = self._synthetic_log(tmp_path, append_after_log=block)
+        _verify_approval_bound_to_audit_record(self._parts(), root)  # no raise
 
     def test_approving_the_candidate_does_not_create_an_active_config(self):
         from nqresearch.config import _repo_root
