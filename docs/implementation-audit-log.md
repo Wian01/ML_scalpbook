@@ -3790,3 +3790,110 @@ in by the entry that creates the initial commit.
 - **Commit:** this entry is committed separately as an audit-log-only commit
   immediately after `2ad4467`; that implementation commit is NOT amended.
   Nothing has been pushed.
+
+## AL-0063 — Test-only commit `4f44d91` makes the post-regeneration tested state durable; every artifact, candidate and identity byte-unchanged
+
+- **Category:** test change with a documented changed requirement (rule 7) +
+  reproducibility record. **AL-0062 is NOT altered**, nor is any earlier
+  entry. Nothing was regenerated, approved, activated or pushed.
+
+- **Test-only commit:** `4f44d91368f7147e81c439cf62236710315768cb`
+  ("Tests: retarget activation assertions to generated-candidate state"),
+  parent `c7ebc550ca3da4cdc5af7241335f22e380d836ac`. It contains EXACTLY two
+  files — `tests/unit/test_activation.py` and
+  `tests/unit/test_eligibility.py` (95 insertions, 58 deletions) — and was
+  verified before committing to contain **no** source, configuration,
+  documentation, artifact or data file, with `git diff --cached --check`
+  passing.
+
+- **WHY the six stale-artifact assertions legitimately changed.** They were
+  written in the AL-0060 and AL-0061 rounds, when the twelve QA artifacts were
+  still stamped under the previous effective config hash `48c2d27a…`. In that
+  world `verify_activation_preconditions()` and
+  `finalize_activation_candidate()` correctly REFUSED with
+  "different effective configuration", and no
+  `partition_activation_candidate.json` existed. The authorised regeneration
+  at `2ad4467` rebuilt all twelve artifacts from the clean approved-policy
+  tree under config `3d4ad511…` and produced the candidate, so those two
+  premises became false. The assertions therefore had to move: **the world
+  changed, not the standard.**
+
+- **What the tests pin NOW — retargeted, not relaxed.** Mechanical readiness
+  is asserted to SUCCEED (the read-only entry points neither write nor
+  activate anything), and the finalized payload is asserted to remain
+  `READY_FOR_ACTIVATION_APPROVAL` / `structural_ready=true` /
+  **`activation_ready=false`** with the approved policy state, the provisional
+  calendar state and the exact ten quarantined dates. The SAFETY property is
+  pinned HARDER than before: `generate_active_partitions()` must still refuse,
+  and the test now asserts the SPECIFIC reason — **no exact human
+  candidate-approval entry exists** ("human-approval audit entry … no entry in
+  the append-only audit log") — with `PartitionsNotActiveError` preserved as
+  the chained cause, so a silent regression can no longer pass as "still
+  refusing". A read-only test inspects the on-disk candidate against the
+  strict schema without rewriting it, and the live CLI end-to-end test was
+  replaced by a source-level assertion on the refusal branch precisely
+  because invoking `--part finalize-activation-candidate` now SUCCEEDS and
+  would rewrite the candidate with a fresh timestamp, changing the very
+  SHA-256 a human is about to approve.
+
+- **CLARIFICATION of AL-0062's test result.** The **1222/1222** figure
+  recorded in AL-0062 was obtained with these two test corrections **present
+  in the working tree but NOT yet committed** — AL-0062 was specified as an
+  audit-log-only commit, so they were deliberately left uncommitted for
+  review and that was reported at the time. Commit `4f44d91` now makes
+  that exact tested state **durable and reproducible from git**. Re-run from
+  the committed tree: **1222/1222** passing.
+
+- **Everything else is byte-identical.** Measured before and after the commit
+  by a read-only snapshot and compared field by field — result: UNCHANGED.
+  - package source hash `39eea4a5e93f31096fe96037d7414bc40a8a70af8fc684fcbe93196b34134a0c`
+  - effective config hash `3d4ad51132b60c612b6212ca058fcc04243bd371c40b82f8ef1dd17fe7958fbd`
+  - research-eligibility policy SHA-256 `b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f`
+  - all 12 artifact SHA-256 values and byte lengths; rollup over the twelve
+    (concatenated in the fixed order, SHA-256) `d1f12009733a4a8c044b03e14a2e8f55b6c70c3f6713c88c6e6a3700fb789f4b`
+  - activation candidate `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32` (4,926 bytes)
+  A test-only commit cannot touch these: the package hash covers
+  `src/nqresearch` only, the config hash covers `config/data/*`, and the
+  artifacts and candidate live outside the repository under the data root.
+
+- **The artifacts' and candidate's `git_sha` remains VALID.** They record
+  `2ad446776082bdc108dceed33c94ab5d31530fcc`, and provenance requires that SHA to be a real ANCESTRAL commit of
+  HEAD — not equal to it. Verified with `git merge-base --is-ancestor`:
+  `2ad4467` is an ancestor of both `c7ebc55` (AL-0062) and `4f44d91`
+  (tests). This is the same audit-log-only/test-only descendant pattern
+  established in AL-0037 and AL-0046.
+
+- **THE NINE IDENTITIES are unchanged** and remain those recorded in AL-0062:
+
+  ```text
+  activation_candidate_sha256    5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32
+  partition_proposal_sha256      24a555d6c45e691fe1838b7d7691059dce7bd6c7d07a55d5623e891a35a906fb
+  effective_calendar_sha256      ca2edfe6c2d05007c35837341ac73de955d8df6fd7821410307bf7fc18a3d010
+  evidence_matrix_sha256         f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250
+  cme_correspondence_sha256      67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0
+  research_eligibility_sha256    b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f
+  coverage_artifact_sha256       3230d9c28bb62d814fdf2d6c03054968b932d05f3de509a77dcbf4dc0432ba31
+  mbo_blocks_sha256              24862c197de32885f30ef976cbf258ab95b4aacaf31d8eb539e298d07d361da9
+  front_contract_series_sha256   d3d618a63c9623696b0a0f9c97b8d077e27bbb4f3cf48b23603f0d53121e960b
+  ```
+
+- **Safety confirmations (re-verified this round):** **no candidate-approval
+  `- decision:` line exists anywhere in this audit log** (asserted
+  mechanically before writing this entry, and by a test); **no
+  `config/data/partitions_active.yaml` exists**; `generate_active_partitions()`
+  still refuses for want of a human candidate-approval entry; the mechanical
+  fence still fails closed; **HOLDOUT remains sealed** and no HOLDOUT or
+  FORWARD market records were accessed, enumerated or decoded; **no
+  normalization has begun** and no feature, label, sample, dataset, model or
+  experiment work occurred; no artifact or the candidate was regenerated or
+  rewritten — `--part finalize-activation-candidate` was NOT re-run; nothing
+  under `D:\projects` or `D:\futures-data-research-s3-backup` was read,
+  scanned, hashed, modified or deleted.
+
+- **Files changed:** `tests/unit/test_activation.py`,
+  `tests/unit/test_eligibility.py` (commit `4f44d91`), and
+  `docs/implementation-audit-log.md` (this entry, committed separately).
+
+- **Commit:** this entry is committed separately as an audit-log-only commit
+  immediately after `4f44d91`; neither `2ad4467` nor `4f44d91` is
+  amended. Nothing has been pushed.
