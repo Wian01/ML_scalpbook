@@ -3320,3 +3320,70 @@ in by the entry that creates the initial commit.
   `docs/holdout-policy.md`, `docs/implementation-audit-log.md`.
 
 - **Commit:** none (stop-for-review rule); nothing pushed.
+
+## AL-0059 — Activation tooling committed (immutable implementation commit `d309628`); nothing activated, nothing regenerated
+
+- **Category:** protocol-relevant decision + commit record. AL-0055 through
+  AL-0058 and every earlier entry are unchanged; this entry is appended after
+  the implementation commit and is committed separately so that commit is
+  never amended.
+- **Immutable implementation commit:** `d309628919630f238bca09d2ce8923e24b2b0349`
+  (message: "Activation tooling: nine-identity binding, strict approval,
+  create-once publication"). It contains EXACTLY the eleven independently
+  reviewed paths and nothing else:
+  modified `CLAUDE.md`, `docs/data-specification.md`,
+  `docs/holdout-policy.md`, `docs/implementation-audit-log.md`,
+  `src/nqresearch/cli.py`, `src/nqresearch/holdout.py`,
+  `tests/unit/conftest.py`, `tests/unit/test_holdout_fence.py`; new
+  `docs/protocol-amendments/PA-0003-activation-binding-and-publication.md`,
+  `src/nqresearch/activation.py`, `tests/unit/test_activation.py`.
+  Pre-commit verification proved the staged set was exactly those eleven
+  paths, that **no** `data/` path, raw vendor file, QA artifact, calendar
+  evidence file, experiment database or generated experiment directory,
+  activation candidate, `partitions_active.yaml`, or `config/data/*.yaml` was
+  staged, that `docs/canonical-spec-v1.0.md` was unmodified, and that
+  `git diff --cached --check` passed. The staged audit-log diff was
+  `471 0` (471 added, 0 deleted), proving rule 21 append-only across
+  AL-0055..AL-0058.
+- **PA-0003 is included** in that commit
+  (`docs/protocol-amendments/PA-0003-activation-binding-and-publication.md`)
+  and is the authoritative description of the activation MECHANISM: the
+  candidate / neutral-proposal separation, all nine bound identities, the
+  exact machine-readable approval fields, the strict-boolean rule, the strict
+  zero-offset whole-second UTC rule, and the create-once publication
+  contract. PA-0001, PA-0002 and the historical five-hash sentences are
+  preserved unchanged.
+- **Verification after the implementation commit:** full unit suite
+  **1183/1183** passing, including the end-to-end synthetic activation that
+  drives the REAL generator and verifier against temporary synthetic trees.
+  Working tree clean at the commit; `git diff --check` passes.
+- **State explicitly UNCHANGED by this commit — committing TOOLING is not
+  activation:**
+  - research-eligibility policy remains **`IMPLEMENTED_PENDING_ACTIVATION_APPROVAL`**
+    (PA-0002 is NOT approved);
+  - calendar verification state remains
+    **`PROVISIONAL_PENDING_DATES_QUARANTINED`**, and the ten pending dates
+    remain truthfully `PENDING_EVIDENCE`;
+  - the neutral partition proposal remains **`PROPOSED_NOT_ACTIVE` with
+    `activation_ready=false`** (top-level status PASS);
+  - **no activation candidate exists** — there is no
+    `partition_activation_candidate.json` anywhere on the data volume;
+  - **no `config/data/partitions_active.yaml` exists**;
+  - **no real QA or closeout artifact was regenerated** — the twelve
+    artifacts stamped at `37e38db` are byte-unchanged;
+  - **partitions and HOLDOUT remain sealed**: verified live, all three
+    activation entry points REFUSE, and both `load_active_partitions()` and
+    `assert_research_range_allowed()` fail closed.
+- **Data-volume scope:** no D: location was accessed or modified. Nothing
+  under `D:\nq-research` was written; nothing under `D:\projects` or
+  `D:\futures-data-research-s3-backup` was read, scanned, hashed, modified or
+  deleted. Every test requiring activation files used temporary synthetic
+  directories only. No normalization, feature, label, sample, dataset, model
+  or experiment work occurred, and HOLDOUT/FORWARD were not accessed.
+- **Not authorised and not done in this step:** approving PA-0002,
+  regenerating artifacts, producing an activation candidate, creating an
+  active partition configuration, or pushing. **Neither commit has been
+  pushed**; pushing requires separate explicit approval.
+- **Commit:** this entry is committed separately as an audit-log-only commit
+  immediately after `d309628`; that implementation commit is NOT
+  amended.
