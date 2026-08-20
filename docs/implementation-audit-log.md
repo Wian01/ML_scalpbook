@@ -4145,3 +4145,137 @@ in by the entry that creates the initial commit.
 - **Commit:** this entry is committed separately as an audit-log-only commit
   immediately after `c19d41d`; no existing commit is amended. Nothing
   pushed.
+
+## AL-0067 — PARTITIONS ACTIVATED for DEV and SELECTION under approval AL-0064; HOLDOUT and FORWARD remain sealed
+
+- **Category:** protocol-relevant decision executed — creation of the active
+  partition configuration. AL-0055 through AL-0066 and every earlier entry are
+  unchanged. **This is the first time in the project's history that research
+  range access is permitted for any partition.**
+
+- **Explicit creation authorization.** The project owner, **Wian**,
+  authorized creating and committing `config/data/partitions_active.yaml`
+  from approved candidate `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32` using approval record **AL-0064**, for
+  **DEV and SELECTION activation ONLY**, with HOLDOUT and FORWARD to remain
+  sealed and with no HOLDOUT/FORWARD record access, no normalization, no
+  artifact regeneration and no candidate rewrite.
+
+- **Activation-state commit:** `a48e8fecd382903e96f36dd27c767e5b5988fda6`
+  ("Activate approved DEV and SELECTION partitions; keep HOLDOUT sealed"),
+  10 files: NEW `config/data/partitions_active.yaml`, plus the four
+  state-dependent test modules and the five current-state documents. No
+  `src/` file and no frozen canonical specification was touched.
+
+- **Active configuration:** `config/data/partitions_active.yaml`,
+  **SHA-256 `e3126133d2ae1707a29eac711b14aa45abea727bb8d9ec2502442d0ddedd3a93`**, 1,092 bytes. Published **create-once** by the
+  reviewed production function `generate_active_partitions()` — never by hand
+  — with `approved_by="Wian"`, `approval_reference="AL-0064"` and
+  `approved_at_utc=2026-08-20T05:12:27Z`, exactly matching AL-0064.
+
+- **The nine approved identities it binds:**
+
+  ```text
+  activation_candidate_sha256    5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32
+  partition_proposal_sha256      24a555d6c45e691fe1838b7d7691059dce7bd6c7d07a55d5623e891a35a906fb
+  effective_calendar_sha256      ca2edfe6c2d05007c35837341ac73de955d8df6fd7821410307bf7fc18a3d010
+  evidence_matrix_sha256         f6099bd824691479dc246dfff44cdce239e9244333d21a56457f82ab714c1250
+  cme_correspondence_sha256      67adfa61f089b3d99153d412843d3b20f1ecddae9b7541778fc7b0a6556004b0
+  research_eligibility_sha256    b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f
+  coverage_artifact_sha256       3230d9c28bb62d814fdf2d6c03054968b932d05f3de509a77dcbf4dc0432ba31
+  mbo_blocks_sha256              24862c197de32885f30ef976cbf258ab95b4aacaf31d8eb539e298d07d361da9
+  front_contract_series_sha256   d3d618a63c9623696b0a0f9c97b8d077e27bbb4f3cf48b23603f0d53121e960b
+  ```
+
+- **Exact ranges:**
+
+  ```text
+  DEV        2024-08-19 -> 2025-11-07   ACTIVE
+  SELECTION  2025-11-10 -> 2026-03-31   ACTIVE
+  HOLDOUT    2026-04-01 -> 2026-08-14   SEALED (bound only so the fence refuses it)
+  FORWARD    from 2026-08-17            SEALED
+  ```
+
+- **Pre-publication verification (read-only, refuse-on-mismatch).** Before
+  anything was written: working tree clean and local `main` == `origin/main`
+  == `34737cfb…`; candidate SHA and strict `ActivationCandidate` schema; all
+  eight bound identities recomputed from their ACTUAL files and matched three
+  ways (candidate-recorded / live / owner-approved); AL-0064 accepted by the
+  production approval verifier; `state=READY_FOR_ACTIVATION_APPROVAL`,
+  `structural_ready=true`, **`activation_ready=false`**; policy
+  `APPROVED_FOR_ACTIVATION`; calendar
+  `PROVISIONAL_PENDING_DATES_QUARANTINED`; and no existing
+  `partitions_active.yaml`.
+
+- **CREATE-ONCE REFUSAL PROOF.** With the file present, a second
+  `generate_active_partitions()` call was refused
+  ("partitions_active.yaml already exists; refusing to overwrite an existing
+  activation; failing closed"). The file was hashed **before and after** that
+  refusal: `e3126133d2ae1707a29eac711b14aa45abea727bb8d9ec2502442d0ddedd3a93` both times — byte-identical — and no `*.tmp` residue
+  was left. Publication uses the atomic create-if-absent `os.link()` path
+  (PA-0003 §7), so an existing activation can never be overwritten.
+
+- **HOLDOUT / FORWARD REFUSAL PROOFS** (against the live active
+  configuration). PERMITTED: DEV-only `2024-08-19..2025-11-07`, DEV interior,
+  SELECTION-only `2025-11-10..2026-03-31`, SELECTION interior, DEV→SELECTION
+  `2024-08-19..2026-03-31`, and the boundary pair `2025-11-07..2025-11-10`.
+  REFUSED with `HoldoutAccessError`: the HOLDOUT start day `2026-04-01`, the
+  HOLDOUT end day `2026-08-14`, the whole HOLDOUT range, the straddle
+  `2026-03-31..2026-04-01`, the enveloping range `2024-08-19..2026-12-31`,
+  and HOLDOUT interior `2026-06-01..2026-06-30`. REFUSED with
+  `HoldoutFenceError`: FORWARD `2026-08-17..2026-08-31`, post-HOLDOUT
+  `2026-09-01..2026-09-30`, pre-DEV `2024-01-01..2024-06-01`, and the
+  DEV-start straddle `2024-08-01..2024-09-01`. `holdout_opening()` still
+  refuses unconditionally — the §4 opening workflow is unimplemented and no
+  `docs/holdout_plan_01.md` exists. **No HOLDOUT or FORWARD market record was
+  accessed, enumerated, decoded, sampled or evaluated.**
+
+- **NORMALIZATION HAS NOT BEGUN.** `research_session_records()` and the
+  research input APIs still refuse with `ResearchLoaderNotImplementedError`:
+  the session-filtered normalized loader is deliberately unimplemented until
+  Milestone 2, because a raw UTC-day file can mix SELECTION and HOLDOUT
+  sessions, so **no raw path is ever returned as research data**. No
+  `normalized/`, `features/`, `datasets/` or `holdout/` directory exists
+  under the data root. No feature, label, sample, dataset, model or
+  experiment work occurred.
+  `research_eligible_sessions()` over the full DEV range returns exactly
+  **309** sessions and **never** a quarantined date; all ten
+  evidence-pending dates remain research-ineligible and still
+  `PENDING_EVIDENCE`.
+
+- **Tests retargeted under rule 7 (changed state, documented).** Sixteen
+  assertions across four modules asserted that partitions were inactive or
+  that `partitions_active.yaml` was absent. Each was examined individually
+  and **no source-code defect was found** — in every case the production code
+  behaved correctly for the newly activated state: the activation
+  preconditions require that no active configuration exist (so both read-only
+  entry points now correctly refuse with "already exists"),
+  `load_active_partitions()` now succeeds (that IS the activation), and the
+  research API now passes the fence and then refuses at the unimplemented
+  loader instead of at the fence. They were retargeted, not weakened: the
+  suite now pins DEV/SELECTION permission, every HOLDOUT and out-of-range
+  refusal above, the 309-session count, quarantine enforcement, the
+  unimplemented loader, unconditional `holdout_opening()` refusal, that no
+  raw path is exposed, and create-once immutability of the active file.
+
+- **Identities unchanged by activation.** `partitions_active.yaml` is
+  deliberately NOT an input to `effective_config_hash()`, so activation
+  cannot invalidate provenance: effective config hash
+  `3d4ad51132b60c612b6212ca058fcc04243bd371c40b82f8ef1dd17fe7958fbd`,
+  package source hash
+  `39eea4a5e93f31096fe96037d7414bc40a8a70af8fc684fcbe93196b34134a0c` and
+  policy SHA-256
+  `b8678e628ea1dd25d8b7be05dbd6e24299bda002eec4593a223bf618c5620d0f` are all
+  unchanged; the 12 artifacts (rollup
+  `d1f12009733a4a8c044b03e14a2e8f55b6c70c3f6713c88c6e6a3700fb789f4b`) and the
+  candidate `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32` are byte-identical. **Nothing was regenerated and the
+  candidate was not rewritten** — it still declares
+  `activation_ready=false`, because activation is conferred only by the
+  active configuration.
+
+- **Verification:** full unit suite **1268/1268** passing with the active
+  configuration, retargeted tests and synchronized documentation all present;
+  `git diff --check` clean.
+
+- **Commit:** this entry is committed separately as an audit-log-only commit
+  immediately after `a48e8fe`; that activation-state commit is NOT
+  amended. Nothing pushed.
