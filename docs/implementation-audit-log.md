@@ -4048,3 +4048,100 @@ in by the entry that creates the initial commit.
 - **Commits this round:** `a28229d` (audit-log-only, AL-0064 approval),
   `c323033` (test-only), and this entry as a separate audit-log-only
   commit. No existing commit is amended. Nothing pushed.
+
+## AL-0066 — Correction: the approval-uniqueness rule is per-referenced-entry, not global; adversarial duplicate test was mis-scoped
+
+- **Category:** review finding reproduced and remediated + correction of an
+  OVERSTATEMENT in my own AL-0064 and AL-0065 prose. **AL-0064 and AL-0065 are
+  NOT edited** — they stand as written, and this entry records what they got
+  wrong. No source, configuration, protocol, artifact, candidate or identity
+  changed.
+
+- **(1) INDEPENDENT REPRODUCTION.** Running `tests/unit/test_eligibility.py`
+  produced **397 passed, 1 failed**:
+  `TestRealCandidateApprovalRecord::test_duplicate_approval_field_is_refused`
+  — `Failed: DID NOT RAISE PartitionsNotActiveError`. Reproduced here exactly
+  before changing anything.
+
+- **(2) ROOT CAUSE — the TEST was mis-scoped, not the parser.** That test
+  appended its synthetic duplicate `- decision:` line to the END of the
+  complete audit log. When it was written, AL-0064 was the last entry, so
+  "end of file" happened to be inside the AL-0064 section. **AL-0065 then
+  followed AL-0064**, so the appended line landed inside AL-0065's section
+  instead. `holdout._verify_approval_bound_to_audit_record` slices the log to
+  the entry named by `approval_reference` — from the `## AL-0064` heading to
+  the next `## AL-` heading — and parses required fields only within that
+  slice. It therefore saw no duplicate, accepted the approval, and the
+  `pytest.raises` failed. The test's assumption about file layout expired; the
+  verifier behaved correctly.
+
+- **(3) THE PRODUCTION PARSER IS CORRECT and matches PA-0003 §4.** PA-0003
+  binds activation to ONE exact referenced entry and requires each required
+  field to appear exactly once INSIDE that entry. **`holdout.py` was NOT
+  changed** in this remediation, and global decision-line uniqueness was
+  deliberately NOT introduced into the verifier: a future independently
+  approved candidate must be able to carry its own decision line in its own
+  separate referenced entry without invalidating this one.
+
+- **(4) MY OVERSTATEMENT, corrected.** The test name and comment, the AL-0064
+  bullet "This is the FIRST and must remain the ONLY audit-log entry carrying
+  `- decision: …`. Any second occurrence anywhere in this append-only log
+  would make approval ambiguous and is refused by
+  `holdout._verify_approval_bound_to_audit_record`", and the AL-0065 phrasing
+  "requires the decision line to occur **exactly once** in the whole log" all
+  described the rule as GLOBAL uniqueness. **That was wrong.** The verifier
+  never enforced it globally and must not.
+
+- **(5) THE ACCURATE RULE.**
+  - **Globally:** the `## AL-nnnn` heading named by `approval_reference` must
+    be unique — exactly one line-anchored match, with a non-identifier
+    boundary so `AL-0064` never matches `AL-00640`. Zero matches or two or
+    more are both refused.
+  - **Within the specifically referenced entry:** every required
+    machine-readable field must appear exactly once as `- key: value` and
+    match exactly. A repeat inside that entry is refused as ambiguous even if
+    byte-identical; a field declared under any OTHER entry does not count and
+    cannot satisfy a missing field.
+  - **Not a rule:** how many decision lines exist elsewhere in the log.
+
+- **(6) CURRENT-STATE FACT (not a parser rule).** The live audit log
+  nevertheless contains **exactly one** candidate-approval decision line, and
+  it sits under `## AL-0064`, because exactly one candidate has been approved
+  to date. The test that asserts this is now explicitly labelled an
+  audit-hygiene fact about the current log; when a second candidate is
+  independently approved in its own entry, that assertion is what must
+  change, not the parser.
+
+- **Remediation — test-only commit `c19d41d`** (`c19d41d456553d84ebd3dd394eac283876083085`), containing
+  exactly `tests/unit/test_eligibility.py`. A shared `_synthetic_log()` helper
+  copies the real log into a temporary tree and mutates only where asked; the
+  live log is never modified. It inserts mutations INSIDE the AL-0064 section,
+  immediately before the next `## AL-` heading. Tests added or retained:
+  six required fields each duplicated byte-identically inside AL-0064, all
+  refused as ambiguous; a conflicting duplicate refused; four required fields
+  removed from AL-0064 and re-declared under a later `## AL-9999` entry, each
+  still refused as MISSING; a duplicated `## AL-0064` heading refused as
+  ambiguous; prefix and malformed references (`AL-00640`, `AL-064`, leading
+  space, lowercase) refused; and a whole approval-shaped block appended after
+  AL-0064 which neither breaks nor completes the referenced record — the real
+  approval still validates.
+
+- **CANDIDATE APPROVAL REMAINS VALID AND UNCHANGED.** AL-0064 is still the
+  valid `approval_reference`; the approved candidate is still
+  `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32`; its eight dependency identities, the three ranges, the approver,
+  the whole-second UTC instant, the disposition and the calendar state are
+  unchanged and still validate against the production verifier. This entry
+  corrects a description and a test, not the decision.
+
+- **Nothing else moved.** Candidate `5d9fc0362e65b263265acaf6162c04bbf5834ed58acf0354e87e861944f74b32` (4,926 bytes) and the 12-artifact
+  rollup `d1f12009733a4a8c044b03e14a2e8f55b6c70c3f6713c88c6e6a3700fb789f4b`
+  are byte-identical; package hash `39eea4a5…`, effective config hash
+  `3d4ad511…` and policy SHA-256 `b8678e62…` are unchanged; no artifact or
+  candidate was regenerated. **No `config/data/partitions_active.yaml`
+  exists**, the fence still fails closed, `holdout_opening()` still refuses,
+  **HOLDOUT remains sealed**, no HOLDOUT/FORWARD records were accessed, and
+  **no normalization has begun**.
+
+- **Commit:** this entry is committed separately as an audit-log-only commit
+  immediately after `c19d41d`; no existing commit is amended. Nothing
+  pushed.
